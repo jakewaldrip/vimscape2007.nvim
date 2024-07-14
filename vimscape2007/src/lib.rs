@@ -7,7 +7,7 @@ fn vimscape2007() -> nvim_oxi::Result<Dictionary> {
     Ok(api)
 }
 
-fn process_batch(_input: String) -> bool {
-    print!("Processing Batch via Rust");
+fn process_batch(input: String) -> bool {
+    print!("Processing Batch via Rust, {} characters", input.len());
     true
 }
