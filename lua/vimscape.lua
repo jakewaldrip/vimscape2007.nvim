@@ -10,6 +10,23 @@ M.setup = function(opts)
 	print("Options: ", opts)
 end
 
+local sanitize_key = function(key)
+	print("Key received: ", key)
+	local b = key:byte()
+	if b <= 126 and b >= 33 then
+		return key
+	end
+
+	local translated = vim.fn.keytrans(key)
+
+	-- Mouse events
+	if translated:match("Left") or translated:match("Mouse") or translated:match("Scroll") then
+		return nil
+	end
+
+	return translated
+end
+
 local record_keys = function(key)
 	-- Return if we're not actively listening
 	if not active then
@@ -22,13 +39,19 @@ local record_keys = function(key)
 		return
 	end
 
+	local new_key = sanitize_key(key)
+
+	if new_key == nil then
+		return
+	end
+
 	if #typed_letters >= 10 then
 		local string_value = table.concat(typed_letters)
 		vimscape.process_batch(string_value)
 		typed_letters = {}
 	end
 
-	table.insert(typed_letters, key)
+	table.insert(typed_letters, new_key)
 end
 
 M.toggle = function()

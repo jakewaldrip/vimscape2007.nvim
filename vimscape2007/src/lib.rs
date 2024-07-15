@@ -8,6 +8,6 @@ fn vimscape2007() -> nvim_oxi::Result<Dictionary> {
 }
 
 fn process_batch(input: String) -> bool {
-    print!("Processing Batch via Rust, {} characters", input.len());
+    print!("Processing Batch via Rust, input: {} ", input);
     true
 }
