@@ -11,16 +11,26 @@ M.setup = function(opts)
 end
 
 local sanitize_key = function(key)
-	print("Key received: ", key)
 	local b = key:byte()
 	if b <= 126 and b >= 33 then
 		return key
 	end
 
 	local translated = vim.fn.keytrans(key)
+	-- print("Translated: ", translated)
 
 	-- Mouse events
 	if translated:match("Left") or translated:match("Mouse") or translated:match("Scroll") then
+		return nil
+	end
+
+	-- Keybound events show up as this for some reason? Skip 'em
+	if translated:match("^<t_..>$") then
+		return nil
+	end
+
+	-- Ignore Escape
+	if translated:match("<Cmd>") then
 		return nil
 	end
 
