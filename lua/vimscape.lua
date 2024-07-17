@@ -17,7 +17,6 @@ local sanitize_key = function(key)
 	end
 
 	local translated = vim.fn.keytrans(key)
-	-- print("Translated: ", translated)
 
 	-- Mouse events
 	if translated:match("Left") or translated:match("Mouse") or translated:match("Scroll") then
