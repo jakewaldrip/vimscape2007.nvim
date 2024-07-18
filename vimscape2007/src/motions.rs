@@ -1,14 +1,17 @@
-enum HorizontalModifiers {
+#[derive(Debug, PartialEq)]
+pub enum HorizontalModifiers {
     Line,
     Word,
 }
 
-enum VerticalModifiers {
+#[derive(Debug, PartialEq)]
+pub enum VerticalModifiers {
     Exact(i32),
     QuickScroll,
 }
 
-enum Motions {
+#[derive(Debug, PartialEq)]
+pub enum Motions {
     MoveDown(VerticalModifiers),
     MoveUp(VerticalModifiers),
     MoveLeft(HorizontalModifiers),
