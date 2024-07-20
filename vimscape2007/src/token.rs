@@ -3,48 +3,60 @@ use nvim_oxi::{self as oxi};
 
 #[derive(Logos, Debug, PartialEq)]
 pub enum Token {
-    #[regex(r"(?:\d{1,})?[jk]", pull_modifier_from_single_movement)]
+    #[regex(r"(?:[1-9]{1}\d{0,})?[jk]", pull_modifier_from_single_movement)]
     MoveVerticalBasic(i32),
 
-    #[regex(r"(?:\d{1,})?[hl]", pull_modifier_from_single_movement)]
+    #[regex(r"(?:[1-9]{1}\d{0,})?[hl]", pull_modifier_from_single_movement)]
     MoveHorizontalBasic(i32),
 
     #[regex(r"TODO1")]
     MoveVerticalChunk,
 
-    #[regex(r"(?:\d{1,})?[wWeEbB]", pull_modifier_from_single_movement)]
+    #[regex(r"(?:[1-9]{1}\d{0,})?[wWeEbB]", pull_modifier_from_single_movement)]
     MoveHorizontalChunk(i32),
 
     #[regex(r"[Ff].(?:[;n]{1,})?")]
     JumpToHorizontal,
 
+    // Needs Tests
     #[regex(r"TODO2")]
     JumpToVertical,
 
+    // Needs Tests
     #[token("%")]
     JumpFromContext,
 
+    // Needs tests
     #[regex(r"TODO3")]
     CameraMovement,
 
+    // Needs tests
     #[regex(r"TODO4")]
     WindowManagement,
 
+    // Needs tests
     #[regex(r"TODO5")]
     VisualModeMagic,
 
+    // Needs tests
     #[regex(r"TODO6")]
     CommandModeMagic,
 
+    // Needs tests
     #[regex(r"TODO7")]
     TextManipulationBasic,
 
+    // Needs tests
     #[regex(r"TODO8")]
     TextManipulationAdvanced,
 
-    #[regex(r"(?:[1-9]{1,})?d", pull_modifier_from_single_movement)]
-    #[regex(r"d(?:[1-9]{1,})?[dwWeEbB$^0]", pull_modifier_from_arbitrary_location)]
-    #[regex(r"(?:[1-9]{1,})?x", pull_modifier_from_single_movement)]
+    // Needs tests
+    #[regex(r"(?:[1-9]{1}\d{0,})?d", pull_modifier_from_single_movement)]
+    #[regex(
+        r"d(?:[1-9]{1}\d{0,})?[dwWeEbB$^0]",
+        pull_modifier_from_arbitrary_location
+    )]
+    #[regex(r"(?:[1-9]{1}\d{0,})?x", pull_modifier_from_single_movement)]
     DeleteText(i32),
 
     #[token(":w<CR>")]
@@ -61,8 +73,13 @@ fn pull_modifier_from_single_movement(lex: &mut Lexer<Token>) -> Option<i32> {
 }
 
 fn pull_modifier_from_arbitrary_location(lex: &mut Lexer<Token>) -> Option<i32> {
-    // TODO
-    Some(1)
+    let slice = lex.slice();
+    let digits: String = slice.chars().filter(|char| char.is_digit(10)).collect();
+    let value: Option<i32> = digits.parse().ok();
+    match value {
+        Some(num) => Some(num),
+        None => Some(1),
+    }
 }
 
 #[oxi::test]
@@ -146,9 +163,17 @@ fn mixed_input_movements_hb_hc_vm() {
 fn jump_horizontal_movements() {
     const TEST_INPUT: &str = "f3;;nfln";
     let mut lexer = Token::lexer(TEST_INPUT);
-    assert_eq!(lexer.next(), Some(Ok(Token::JumpHorizontal)));
+    assert_eq!(lexer.next(), Some(Ok(Token::JumpToHorizontal)));
     assert_eq!(lexer.slice(), "f3;;n");
-    assert_eq!(lexer.next(), Some(Ok(Token::JumpHorizontal)));
+    assert_eq!(lexer.next(), Some(Ok(Token::JumpToHorizontal)));
     assert_eq!(lexer.slice(), "fln");
     assert_eq!(lexer.next(), None);
+}
+
+#[oxi::test]
+fn save_file_token() {
+    const TEST_INPUT: &str = ":w<CR>";
+    let mut lexer = Token::lexer(TEST_INPUT);
+    assert_eq!(lexer.next(), Some(Ok(Token::SaveFile)));
+    assert_eq!(lexer.slice(), TEST_INPUT);
 }
