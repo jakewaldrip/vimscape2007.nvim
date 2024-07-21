@@ -1,8 +1,9 @@
 use logos::{Lexer, Logos};
 use nvim_oxi::{self as oxi};
 
-// Handle yy, p, y{}, etc?
-// Figure out how it renders
+// TODO Handle yy, p, y{}, etc?
+// TODO Figure out how it renders
+// TODO Test callback methods individually? Woudn't hurt
 #[derive(Logos, Debug, PartialEq)]
 pub enum Token {
     // Potentially need to worry about gj and gk here
@@ -98,6 +99,10 @@ pub enum Token {
 
     #[token(":w<CR>")]
     SaveFile,
+
+    // Needs tests
+    #[regex(":(?:help|h) .{1,}(?:<CR>|<Cmd>)", was_command_completed)]
+    HelpPage(bool),
 }
 
 fn pull_modifier_from_single_movement(lex: &mut Lexer<Token>) -> Option<i32> {
@@ -122,7 +127,7 @@ fn pull_modifier_from_arbitrary_location(lex: &mut Lexer<Token>) -> Option<i32> 
 fn was_command_completed(lex: &mut Lexer<Token>) -> Option<bool> {
     let slice = lex.slice();
     let was_escaped = slice.contains("<Cmd>");
-    Some(was_escaped)
+    Some(!was_escaped)
 }
 
 #[oxi::test]
@@ -223,4 +228,23 @@ fn save_file_token() {
     let mut lexer = Token::lexer(TEST_INPUT);
     assert_eq!(lexer.next(), Some(Ok(Token::SaveFile)));
     assert_eq!(lexer.slice(), TEST_INPUT);
+    assert_eq!(lexer.next(), None);
+}
+
+#[oxi::test]
+fn help_page_token_command_completed() {
+    const TEST_INPUT: &str = ":help vimscape2007<CR>";
+    let mut lexer = Token::lexer(TEST_INPUT);
+    assert_eq!(lexer.next(), Some(Ok(Token::HelpPage(true))));
+    assert_eq!(lexer.slice(), TEST_INPUT);
+    assert_eq!(lexer.next(), None);
+}
+
+#[oxi::test]
+fn help_page_token_command_completed_false() {
+    const TEST_INPUT: &str = ":help vimscape2007<Cmd>";
+    let mut lexer = Token::lexer(TEST_INPUT);
+    assert_eq!(lexer.next(), Some(Ok(Token::HelpPage(false))));
+    assert_eq!(lexer.slice(), TEST_INPUT);
+    assert_eq!(lexer.next(), None);
 }
