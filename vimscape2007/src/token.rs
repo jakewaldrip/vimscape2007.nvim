@@ -15,6 +15,7 @@ pub enum Token {
     #[regex(r"(?:[1-9]{1}\d{0,})?(?:<C-U>|<C-D>)")]
     MoveVerticalChunk,
 
+    // handle gE and ge, as well as g_ (end of line non blank)
     #[regex(r"(?:[1-9]{1}\d{0,})?[wWeEbB]", pull_modifier_from_single_movement)]
     MoveHorizontalChunk(i32),
 
@@ -43,10 +44,12 @@ pub enum Token {
     CameraMovement,
 
     // Needs tests
+    // Stuff like splitting windows, closing them, jumping between windows
     #[regex(r"TODO1")]
     WindowManagement,
 
     // Needs tests
+    // Anything in visual mode will go here, maybe split this out more into basic + advanced?
     #[regex(r"TODO2")]
     VisualModeMagic,
 
@@ -55,12 +58,23 @@ pub enum Token {
     CommandModeMagic(bool),
 
     // Needs tests
+    // Stuff like x, r{}, xp, J
     #[regex(r"TODO3")]
     TextManipulationBasic,
 
     // Needs tests
+    // Stuff like toggling case, replacing words, etc
+    // g{} and c{} related stuff
     #[regex(r"TODO4")]
     TextManipulationAdvanced,
+
+    // Needs tests
+    #[regex(r"(?:[uU]|<C-R>)")]
+    UndoRedo,
+
+    // Needs tests
+    #[token(".")]
+    DotRepeat,
 
     // Needs tests
     // Make sure enter is actually <CR>
