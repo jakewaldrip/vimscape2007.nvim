@@ -1,25 +1,35 @@
 use logos::{Lexer, Logos};
 use nvim_oxi::{self as oxi};
 
+// Handle yy, p, y{}, etc?
+// Figure out how it renders
 #[derive(Logos, Debug, PartialEq)]
 pub enum Token {
+    // Potentially need to worry about gj and gk here
     #[regex(r"(?:[1-9]{1}\d{0,})?[jk]", pull_modifier_from_single_movement)]
     MoveVerticalBasic(i32),
 
     #[regex(r"(?:[1-9]{1}\d{0,})?[hl]", pull_modifier_from_single_movement)]
     MoveHorizontalBasic(i32),
 
-    #[regex(r"TODO1")]
+    #[regex(r"(?:[1-9]{1}\d{0,})?(?:<C-U>|<C-D>)")]
     MoveVerticalChunk,
 
     #[regex(r"(?:[1-9]{1}\d{0,})?[wWeEbB]", pull_modifier_from_single_movement)]
     MoveHorizontalChunk(i32),
 
-    #[regex(r"[Ff].(?:[;n]{1,})?")]
+    #[regex(r"[FfTt].(?:[;n]{1,})?")]
     JumpToHorizontal,
 
     // Needs Tests
-    #[regex(r"TODO2")]
+    #[regex(r"(?:[1-9]{1}\d{0,})?(?:gg|G)", pull_modifier_from_single_movement)]
+    #[regex(r":(?:[1-9]{1}\d{0,})", pull_modifier_from_arbitrary_location)]
+    JumpToLineNumber(i32),
+
+    // Needs tests
+    // Check how control renders commands here
+    #[regex(r"[MHL]")]
+    #[regex(r"(?:<C-F>|<C-B>)")]
     JumpToVertical,
 
     // Needs Tests
@@ -27,28 +37,41 @@ pub enum Token {
     JumpFromContext,
 
     // Needs tests
-    #[regex(r"TODO3")]
+    // Check how control renders commands here
+    #[regex(r"z[zbt]")]
+    #[regex(r"(?:<C-E>|<C-Y>)")]
     CameraMovement,
 
     // Needs tests
-    #[regex(r"TODO4")]
+    #[regex(r"TODO1")]
     WindowManagement,
 
     // Needs tests
-    #[regex(r"TODO5")]
+    #[regex(r"TODO2")]
     VisualModeMagic,
 
     // Needs tests
-    #[regex(r"TODO6")]
-    CommandModeMagic,
+    #[regex(r":.{1,}<CR>", was_command_completed)]
+    CommandModeMagic(bool),
 
     // Needs tests
-    #[regex(r"TODO7")]
+    #[regex(r"TODO3")]
     TextManipulationBasic,
 
     // Needs tests
-    #[regex(r"TODO8")]
+    #[regex(r"TODO4")]
     TextManipulationAdvanced,
+
+    // Needs tests
+    // Make sure enter is actually <CR>
+    #[regex(r"/.{1,}(?:<CR>|<Cmd>)", was_command_completed)]
+    CommandSearch(bool),
+
+    // Needs tests
+    // Not sure if we can include this, going to test more
+    // Stuff like gd, gD, etc
+    #[regex(r"TODO5")]
+    LSPNavigation,
 
     // Needs tests
     #[regex(r"(?:[1-9]{1}\d{0,})?d", pull_modifier_from_single_movement)]
@@ -80,6 +103,12 @@ fn pull_modifier_from_arbitrary_location(lex: &mut Lexer<Token>) -> Option<i32> 
         Some(num) => Some(num),
         None => Some(1),
     }
+}
+
+fn was_command_completed(lex: &mut Lexer<Token>) -> Option<bool> {
+    let slice = lex.slice();
+    let was_escaped = slice.contains("<Cmd>");
+    Some(was_escaped)
 }
 
 #[oxi::test]
@@ -161,12 +190,16 @@ fn mixed_input_movements_hb_hc_vm() {
 
 #[oxi::test]
 fn jump_horizontal_movements() {
-    const TEST_INPUT: &str = "f3;;nfln";
+    const TEST_INPUT: &str = "f3;;nFlnt3T3";
     let mut lexer = Token::lexer(TEST_INPUT);
     assert_eq!(lexer.next(), Some(Ok(Token::JumpToHorizontal)));
     assert_eq!(lexer.slice(), "f3;;n");
     assert_eq!(lexer.next(), Some(Ok(Token::JumpToHorizontal)));
-    assert_eq!(lexer.slice(), "fln");
+    assert_eq!(lexer.slice(), "Fln");
+    assert_eq!(lexer.next(), Some(Ok(Token::JumpToHorizontal)));
+    assert_eq!(lexer.slice(), "t3");
+    assert_eq!(lexer.next(), Some(Ok(Token::JumpToHorizontal)));
+    assert_eq!(lexer.slice(), "T3");
     assert_eq!(lexer.next(), None);
 }
 
