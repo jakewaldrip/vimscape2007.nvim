@@ -1,18 +1,24 @@
 use logos::{Lexer, Logos};
 use nvim_oxi::{self as oxi};
 
-// TODO Handle yy, p, y{}, etc?
 // TODO Figure out how it renders
 // TODO Test callback methods individually? Woudn't hurt
+// TODO figure out what to do with gd, gD, etc. Maybe capture them specifically?
+// TODO figure out macros
 #[derive(Logos, Debug, PartialEq)]
 pub enum Token {
-    // Potentially need to worry about gj and gk here
-    #[regex(r"(?:[1-9]{1}\d{0,})?[jk]", pull_modifier_from_single_movement)]
+    // tested locally, keys are correct
+    #[regex(
+        r"(?:[1-9]{1}\d{0,})?(?:[jk]|gj|gk)",
+        pull_modifier_from_single_movement
+    )]
     MoveVerticalBasic(i32),
 
+    // Tested locally, keys are correct
     #[regex(r"(?:[1-9]{1}\d{0,})?[hl]", pull_modifier_from_single_movement)]
     MoveHorizontalBasic(i32),
 
+    // Tested locally, keys are correct
     #[regex(r"(?:[1-9]{1}\d{0,})?(?:<C-U>|<C-D>)")]
     MoveVerticalChunk,
 
@@ -29,7 +35,7 @@ pub enum Token {
     JumpToLineNumber(i32),
 
     // Needs tests
-    // Check how control renders commands here
+    // Tested locally, keys are correct
     #[regex(r"[MHL]")]
     #[regex(r"(?:<C-F>|<C-B>)")]
     JumpToVertical,
@@ -39,8 +45,9 @@ pub enum Token {
     JumpFromContext,
 
     // Needs tests
-    // Check how control renders commands here
-    #[regex(r"z[zbt]")]
+    // zz renders as zzz
+    // Tested locally, keys are correct
+    #[regex(r"z(?:zz|[bt])")]
     #[regex(r"(?:<C-E>|<C-Y>)")]
     CameraMovement,
 
@@ -59,8 +66,11 @@ pub enum Token {
     CommandModeMagic(bool),
 
     // Needs tests
-    // Stuff like x, r{}, xp, J
-    #[regex(r"TODO3")]
+    // x renders as xdl
+    // Tested locally, keys are correct
+    #[regex(r"(?:[1-9]{1}\d{0,})?xdl")]
+    #[regex(r"(?:[1-9]{1}\d{0,})?J")]
+    #[regex(r"(?:[1-9]{1}\d{0,})?r.")]
     TextManipulationBasic,
 
     // Needs tests
@@ -70,38 +80,56 @@ pub enum Token {
     TextManipulationAdvanced,
 
     // Needs tests
+    // p renders as ""1p
+    // yy renders as yyy
+    // Y renders as y$
+    // y<Esc> renders as y<Esc><C-\><C-N><Esc>, i can't explain that one
+    // Tested locally, keys are correct
+    #[regex(r#"(?:[1-9]{1}\d{0,})?(?:""(?:[1-9]{1}\d{0,})?p|""(?:[1-9]{1}\d{0,})?P)"#)]
+    #[regex(r"(?:[1-9]{1}\d{0,})?yyy")]
+    #[regex(r"(?:[1-9]{1}\d{0,})?y(?:[$w]|iw|aw|<Esc><C-\\><C-N><Esc>)")]
+    YankPaste,
+
+    // Needs tests
+    // Tested locally, keys are correct
     #[regex(r"(?:[uU]|<C-R>)")]
     UndoRedo,
 
     // Needs tests
+    // This literally just repeats the keys
+    // so i will just let it grant xp for both categories
+    // Tested locally, keys are correct
     #[token(".")]
     DotRepeat,
 
     // Needs tests
     // Make sure enter is actually <CR>
-    #[regex(r"/.{1,}(?:<CR>|<Cmd>)", was_command_completed)]
+    // Tested locally, keys are correct
+    #[regex(r"/.{1,}(?:<CR>|<Esc>)", was_command_completed)]
     CommandSearch(bool),
 
     // Needs tests
-    // Not sure if we can include this, going to test more
-    // Stuff like gd, gD, etc
-    #[regex(r"TODO5")]
-    LSPNavigation,
-
-    // Needs tests
+    // Tested Locally, keys correct
+    // d$, dw, etc, doubles up on every key, ie dww, d$$, etc
+    // If a number is included, it doubles the number instead
     #[regex(r"(?:[1-9]{1}\d{0,})?d", pull_modifier_from_single_movement)]
     #[regex(
-        r"d(?:[1-9]{1}\d{0,})?[dwWeEbB$^0]",
-        pull_modifier_from_arbitrary_location
+        r"d(?:[1-9]{1}\d{0,})?[dwWeEbB$^0][dwWeEbB$^0]",
+        pull_modifier_from_arbitrary_location_hacky_version
     )]
     #[regex(r"(?:[1-9]{1}\d{0,})?x", pull_modifier_from_single_movement)]
     DeleteText(i32),
 
+    // Tested locally, keys are correct
     #[token(":w<CR>")]
     SaveFile,
 
     // Needs tests
-    #[regex(":(?:help|h) .{1,}(?:<CR>|<Cmd>)", was_command_completed)]
+    // Tested Locally, keys correct
+    #[regex(
+        ":(?:help|h) .{1,}(?:<CR>|<Esc>)(?:<C-W>(?:c)?)?",
+        was_command_completed
+    )]
     HelpPage(bool),
 }
 
@@ -124,9 +152,28 @@ fn pull_modifier_from_arbitrary_location(lex: &mut Lexer<Token>) -> Option<i32> 
     }
 }
 
+// d2d and d12d render as d22d and d112d respectively
+// cut off first char if more than 1 exists
+fn pull_modifier_from_arbitrary_location_hacky_version(lex: &mut Lexer<Token>) -> Option<i32> {
+    let slice = lex.slice();
+    let mut digit_vec: Vec<char> = slice.chars().filter(|char| char.is_digit(10)).collect();
+    if digit_vec.len() == 0 {
+        return Some(1);
+    } else if digit_vec.len() > 1 {
+        digit_vec.remove(0);
+    }
+
+    let digits: String = digit_vec.into_iter().collect();
+    let value: Option<i32> = digits.parse().ok();
+    match value {
+        Some(num) => Some(num),
+        None => Some(1),
+    }
+}
+
 fn was_command_completed(lex: &mut Lexer<Token>) -> Option<bool> {
     let slice = lex.slice();
-    let was_escaped = slice.contains("<Cmd>");
+    let was_escaped = slice.contains("<Esc>");
     Some(!was_escaped)
 }
 
@@ -242,7 +289,7 @@ fn help_page_token_command_completed() {
 
 #[oxi::test]
 fn help_page_token_command_completed_false() {
-    const TEST_INPUT: &str = ":help vimscape2007<Cmd>";
+    const TEST_INPUT: &str = ":help vimscape2007<Esc>";
     let mut lexer = Token::lexer(TEST_INPUT);
     assert_eq!(lexer.next(), Some(Ok(Token::HelpPage(false))));
     assert_eq!(lexer.slice(), TEST_INPUT);

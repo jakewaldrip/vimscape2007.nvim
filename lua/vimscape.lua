@@ -50,6 +50,8 @@ local record_keys = function(key)
 
 	local new_key = sanitize_key(key)
 
+	print("Key: ", new_key)
+
 	if new_key == nil then
 		return
 	end
