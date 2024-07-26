@@ -3,11 +3,10 @@ use nvim_oxi::{self as oxi};
 
 // TODO Figure out how it renders
 // TODO Test callback methods individually? Woudn't hurt
-// TODO figure out what to do with gd, gD, etc. Maybe capture them specifically?
 // TODO figure out macros
 #[derive(Logos, Debug, PartialEq)]
 pub enum Token {
-    // tested locally, keys are correct
+    // Tested locally, keys are correct
     #[regex(
         r"(?:[1-9]{1}\d{0,})?(?:[jk]|gj|gk)",
         pull_modifier_from_single_movement
@@ -23,15 +22,22 @@ pub enum Token {
     MoveVerticalChunk,
 
     // handle gE and ge, as well as g_ (end of line non blank)
+    // Tested locally, keys are correct
     #[regex(r"(?:[1-9]{1}\d{0,})?[wWeEbB]", pull_modifier_from_single_movement)]
     MoveHorizontalChunk(i32),
 
+    // Tested locally, keys are correct
     #[regex(r"[FfTt].(?:[;n]{1,})?")]
     JumpToHorizontal,
 
     // Needs Tests
+    // Tested locally, keys are correct
     #[regex(r"(?:[1-9]{1}\d{0,})?(?:gg|G)", pull_modifier_from_single_movement)]
-    #[regex(r":(?:[1-9]{1}\d{0,})", pull_modifier_from_arbitrary_location)]
+    #[regex(
+        r":(?:[1-9]{1}\d{0,}<CR>)",
+        pull_modifier_from_arbitrary_location,
+        priority = 20
+    )]
     JumpToLineNumber(i32),
 
     // Needs tests
@@ -41,7 +47,9 @@ pub enum Token {
     JumpToVertical,
 
     // Needs Tests
-    #[token("%")]
+    // Renders as the token below
+    // Tested locally, keys are correct
+    #[token(":<C-U>call<Space>matchit#Match_wrapper('',1,'n')<CR>m'zv")]
     JumpFromContext,
 
     // Needs tests
@@ -52,17 +60,21 @@ pub enum Token {
     CameraMovement,
 
     // Needs tests
-    // Stuff like splitting windows, closing them, jumping between windows
-    #[regex(r"TODO1")]
+    // Tested locally, keys are correct
+    #[regex(r"<C-W>(?:[svwqx=hljkHLJK]|<C-H>|<C-J>|<C-K>|<C-L>)")]
     WindowManagement,
 
     // Needs tests
     // Anything in visual mode will go here, maybe split this out more into basic + advanced?
-    #[regex(r"TODO2")]
-    VisualModeMagic,
+    // Needs major brainstorming here
+    // Needs local testing
+    #[regex(r"TODO2", was_command_escaped)]
+    VisualModeMagic(bool),
 
     // Needs tests
-    #[regex(r":.{1,}<CR>", was_command_completed)]
+    // Needs minor brainstorming here
+    // Needs local testing
+    #[regex(r":.{1,}<CR>", was_command_escaped)]
     CommandModeMagic(bool),
 
     // Needs tests
@@ -76,6 +88,8 @@ pub enum Token {
     // Needs tests
     // Stuff like toggling case, replacing words, etc
     // g{} and c{} related stuff
+    // Needs minor brainstorming
+    // Needs local testing
     #[regex(r"TODO4")]
     TextManipulationAdvanced,
 
@@ -105,13 +119,13 @@ pub enum Token {
     // Needs tests
     // Make sure enter is actually <CR>
     // Tested locally, keys are correct
-    #[regex(r"/.{1,}(?:<CR>|<Esc>)", was_command_completed)]
+    #[regex(r"/.{1,}(?:<CR>|<Esc>)", was_command_escaped)]
     CommandSearch(bool),
 
     // Needs tests
-    // Tested Locally, keys correct
     // d$, dw, etc, doubles up on every key, ie dww, d$$, etc
     // If a number is included, it doubles the number instead
+    // Tested Locally, keys correct
     #[regex(r"(?:[1-9]{1}\d{0,})?d", pull_modifier_from_single_movement)]
     #[regex(
         r"d(?:[1-9]{1}\d{0,})?[dwWeEbB$^0][dwWeEbB$^0]",
@@ -126,10 +140,7 @@ pub enum Token {
 
     // Needs tests
     // Tested Locally, keys correct
-    #[regex(
-        ":(?:help|h) .{1,}(?:<CR>|<Esc>)(?:<C-W>(?:c)?)?",
-        was_command_completed
-    )]
+    #[regex(":(?:help|h) .{1,}(?:<CR>|<Esc>)(?:<C-W>(?:c)?)?", was_command_escaped)]
     HelpPage(bool),
 }
 
@@ -171,7 +182,7 @@ fn pull_modifier_from_arbitrary_location_hacky_version(lex: &mut Lexer<Token>) -
     }
 }
 
-fn was_command_completed(lex: &mut Lexer<Token>) -> Option<bool> {
+fn was_command_escaped(lex: &mut Lexer<Token>) -> Option<bool> {
     let slice = lex.slice();
     let was_escaped = slice.contains("<Esc>");
     Some(!was_escaped)
