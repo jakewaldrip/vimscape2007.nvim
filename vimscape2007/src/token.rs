@@ -4,6 +4,8 @@ use nvim_oxi::{self as oxi};
 // TODO Figure out how it renders
 // TODO Test callback methods individually? Woudn't hurt
 // TODO figure out macros
+// TODO Consider marks?
+// TODO consider buffers?
 #[derive(Logos, Debug, PartialEq)]
 pub enum Token {
     // Tested locally, keys are correct
@@ -68,7 +70,7 @@ pub enum Token {
     // Anything in visual mode will go here, maybe split this out more into basic + advanced?
     // Needs major brainstorming here
     // Needs local testing
-    #[regex(r"TODO2", was_command_escaped)]
+    #[regex(r"TODO1", was_command_escaped)]
     VisualModeMagic(bool),
 
     // Needs tests
@@ -82,15 +84,22 @@ pub enum Token {
     // Tested locally, keys are correct
     #[regex(r"(?:[1-9]{1}\d{0,})?xdl")]
     #[regex(r"(?:[1-9]{1}\d{0,})?J")]
+    #[regex(r"(?:[1-9]{1}\d{0,})?gJ")]
     #[regex(r"(?:[1-9]{1}\d{0,})?r.")]
     TextManipulationBasic,
 
     // Needs tests
     // Stuff like toggling case, replacing words, etc
-    // g{} and c{} related stuff
-    // Needs minor brainstorming
+    // R until <Esc>
+    // g~, gu, gU -> change case for motion
+    // cc, replace entire line
+    // c$, C - replace to end of line
+    // c[ia]{} - replace entire object
+    // c[we] - replcae to end of the word
+    // s - delete char and sub text (similar to c)
+    // S - delete line and sub text
     // Needs local testing
-    #[regex(r"TODO4")]
+    #[regex(r"R.{0,}<Esc>")]
     TextManipulationAdvanced,
 
     // Needs tests
@@ -185,7 +194,7 @@ fn pull_modifier_from_arbitrary_location_hacky_version(lex: &mut Lexer<Token>) -
 fn was_command_escaped(lex: &mut Lexer<Token>) -> Option<bool> {
     let slice = lex.slice();
     let was_escaped = slice.contains("<Esc>");
-    Some(!was_escaped)
+    Some(was_escaped)
 }
 
 #[oxi::test]
