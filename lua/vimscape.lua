@@ -56,7 +56,7 @@ local record_keys = function(key)
 		return
 	end
 
-	if #typed_letters >= 10 then
+	if #typed_letters >= 50 then
 		local string_value = table.concat(typed_letters)
 		vimscape.process_batch(string_value)
 		typed_letters = {}

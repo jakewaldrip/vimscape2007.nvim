@@ -90,16 +90,23 @@ pub enum Token {
 
     // Needs tests
     // Stuff like toggling case, replacing words, etc
-    // R until <Esc>
-    // g~, gu, gU -> change case for motion
-    // cc, replace entire line
-    // c$, C - replace to end of line
-    // c[ia]{} - replace entire object
-    // c[we] - replcae to end of the word
-    // s - delete char and sub text (similar to c)
-    // S - delete line and sub text
-    // Needs local testing
+    // Tested locally, keys are correct
     #[regex(r"R.{0,}<Esc>")]
+    #[regex(r"g[~uU](?:[1-9]{1}\d{0,})?[wWeEbB$^0]", priority = 20)]
+    #[regex(r"g[~uU](?:[1-9]{1}\d{0,})?[fFtT].", priority = 20)]
+    #[regex(r"ci\)\)<C-\\><C-N>zvzvv")]
+    #[regex(r"ci\(\(<C-\\><C-N>zvzvv")]
+    #[regex(r"ci\[\[<C-\\><C-N>zvzvv")]
+    #[regex(r"ci\]\]<C-\\><C-N>zvzvv")]
+    #[regex(r"ci\{\{<C-\\><C-N>zvzvv")]
+    #[regex(r"ci\}\}<C-\\><C-N>zvzvv")]
+    #[token("c$$")]
+    #[token("Cc$")]
+    #[regex("c(?:ee|ww)")]
+    #[token("scl")]
+    #[token("Scc")]
+    #[token("ciwwiw")]
+    #[token("cawwaw")]
     TextManipulationAdvanced,
 
     // Needs tests
@@ -302,7 +309,7 @@ fn save_file_token() {
 fn help_page_token_command_completed() {
     const TEST_INPUT: &str = ":help vimscape2007<CR>";
     let mut lexer = Token::lexer(TEST_INPUT);
-    assert_eq!(lexer.next(), Some(Ok(Token::HelpPage(true))));
+    assert_eq!(lexer.next(), Some(Ok(Token::HelpPage(false))));
     assert_eq!(lexer.slice(), TEST_INPUT);
     assert_eq!(lexer.next(), None);
 }
@@ -311,7 +318,7 @@ fn help_page_token_command_completed() {
 fn help_page_token_command_completed_false() {
     const TEST_INPUT: &str = ":help vimscape2007<Esc>";
     let mut lexer = Token::lexer(TEST_INPUT);
-    assert_eq!(lexer.next(), Some(Ok(Token::HelpPage(false))));
+    assert_eq!(lexer.next(), Some(Ok(Token::HelpPage(true))));
     assert_eq!(lexer.slice(), TEST_INPUT);
     assert_eq!(lexer.next(), None);
 }
