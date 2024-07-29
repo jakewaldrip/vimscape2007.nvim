@@ -1,68 +1,56 @@
 use logos::{Lexer, Logos};
-use nvim_oxi::{self as oxi};
+// use nvim_oxi::{self as oxi};
 
-// TODO Figure out how it renders
 // TODO Test callback methods individually? Woudn't hurt
 // TODO figure out macros
 // TODO Consider marks?
 // TODO consider buffers?
 #[derive(Logos, Debug, PartialEq)]
 pub enum Token {
-    // Tested locally, keys are correct
     #[regex(
         r"(?:[1-9]{1}\d{0,})?(?:[jk]|gj|gk)",
         pull_modifier_from_single_movement
     )]
     MoveVerticalBasic(i32),
 
-    // Tested locally, keys are correct
     #[regex(r"(?:[1-9]{1}\d{0,})?[hl]", pull_modifier_from_single_movement)]
     MoveHorizontalBasic(i32),
 
-    // Tested locally, keys are correct
     #[regex(r"(?:[1-9]{1}\d{0,})?(?:<C-U>|<C-D>)")]
     MoveVerticalChunk,
 
-    // handle gE and ge, as well as g_ (end of line non blank)
-    // Tested locally, keys are correct
     #[regex(r"(?:[1-9]{1}\d{0,})?[wWeEbB]", pull_modifier_from_single_movement)]
     MoveHorizontalChunk(i32),
 
-    // Tested locally, keys are correct
     #[regex(r"[FfTt].(?:[;n]{1,})?")]
+    #[token("_g_")]
     JumpToHorizontal,
 
-    // Needs Tests
-    // Tested locally, keys are correct
-    #[regex(r"(?:[1-9]{1}\d{0,})?(?:gg|G)", pull_modifier_from_single_movement)]
+    // TODO
+    // In the middle of tests, fails if any input is after it which obviously is a problem
+    // More widespread than just here, seems to be related to input after <CR>
+    #[regex(r"(?:[1-9]{1}\d{0,})?(?:gg|G)", pull_modifier_from_arbitrary_location)]
     #[regex(
-        r":(?:[1-9]{1}\d{0,}<CR>)",
+        r":[1-9]{1}\d{0,}<CR>",
         pull_modifier_from_arbitrary_location,
         priority = 20
     )]
     JumpToLineNumber(i32),
 
-    // Needs tests
-    // Tested locally, keys are correct
     #[regex(r"[MHL]")]
     #[regex(r"(?:<C-F>|<C-B>)")]
     JumpToVertical,
 
-    // Needs Tests
-    // Renders as the token below
-    // Tested locally, keys are correct
+    // % renders as the token below
     #[token(":<C-U>call<Space>matchit#Match_wrapper('',1,'n')<CR>m'zv")]
     JumpFromContext,
 
-    // Needs tests
     // zz renders as zzz
-    // Tested locally, keys are correct
     #[regex(r"z(?:zz|[bt])")]
     #[regex(r"(?:<C-E>|<C-Y>)")]
     CameraMovement,
 
     // Needs tests
-    // Tested locally, keys are correct
     #[regex(r"<C-W>(?:[svwqx=hljkHLJK]|<C-H>|<C-J>|<C-K>|<C-L>)")]
     WindowManagement,
 
@@ -74,14 +62,13 @@ pub enum Token {
     VisualModeMagic(bool),
 
     // Needs tests
-    // Needs minor brainstorming here
-    // Needs local testing
+    // Captures all commands, other categories
+    // capture commands that are more relevant to them
     #[regex(r":.{1,}<CR>", was_command_escaped)]
     CommandModeMagic(bool),
 
     // Needs tests
     // x renders as xdl
-    // Tested locally, keys are correct
     #[regex(r"(?:[1-9]{1}\d{0,})?xdl")]
     #[regex(r"(?:[1-9]{1}\d{0,})?J")]
     #[regex(r"(?:[1-9]{1}\d{0,})?gJ")]
@@ -89,8 +76,6 @@ pub enum Token {
     TextManipulationBasic,
 
     // Needs tests
-    // Stuff like toggling case, replacing words, etc
-    // Tested locally, keys are correct
     #[regex(r"R.{0,}<Esc>")]
     #[regex(r"g[~uU](?:[1-9]{1}\d{0,})?[wWeEbB$^0]", priority = 20)]
     #[regex(r"g[~uU](?:[1-9]{1}\d{0,})?[fFtT].", priority = 20)]
@@ -114,34 +99,28 @@ pub enum Token {
     // yy renders as yyy
     // Y renders as y$
     // y<Esc> renders as y<Esc><C-\><C-N><Esc>, i can't explain that one
-    // Tested locally, keys are correct
     #[regex(r#"(?:[1-9]{1}\d{0,})?(?:""(?:[1-9]{1}\d{0,})?p|""(?:[1-9]{1}\d{0,})?P)"#)]
     #[regex(r"(?:[1-9]{1}\d{0,})?yyy")]
     #[regex(r"(?:[1-9]{1}\d{0,})?y(?:[$w]|iw|aw|<Esc><C-\\><C-N><Esc>)")]
     YankPaste,
 
     // Needs tests
-    // Tested locally, keys are correct
     #[regex(r"(?:[uU]|<C-R>)")]
     UndoRedo,
 
     // Needs tests
     // This literally just repeats the keys
     // so i will just let it grant xp for both categories
-    // Tested locally, keys are correct
     #[token(".")]
     DotRepeat,
 
     // Needs tests
-    // Make sure enter is actually <CR>
-    // Tested locally, keys are correct
     #[regex(r"/.{1,}(?:<CR>|<Esc>)", was_command_escaped)]
     CommandSearch(bool),
 
     // Needs tests
     // d$, dw, etc, doubles up on every key, ie dww, d$$, etc
-    // If a number is included, it doubles the number instead
-    // Tested Locally, keys correct
+    // If a number is included, it doubles the digits of the number
     #[regex(r"(?:[1-9]{1}\d{0,})?d", pull_modifier_from_single_movement)]
     #[regex(
         r"d(?:[1-9]{1}\d{0,})?[dwWeEbB$^0][dwWeEbB$^0]",
@@ -150,14 +129,17 @@ pub enum Token {
     #[regex(r"(?:[1-9]{1}\d{0,})?x", pull_modifier_from_single_movement)]
     DeleteText(i32),
 
-    // Tested locally, keys are correct
-    #[token(":w<CR>")]
+    #[token(":w<CR>", priority = 20)]
     SaveFile,
 
     // Needs tests
-    // Tested Locally, keys correct
     #[regex(":(?:help|h) .{1,}(?:<CR>|<Esc>)(?:<C-W>(?:c)?)?", was_command_escaped)]
     HelpPage(bool),
+
+    #[token("[a-zA-Z0-9_:]", priority = 1)]
+    #[token("<CR>", priority = 1)]
+    #[token("<Esc>", priority = 1)]
+    UnhandledToken,
 }
 
 fn pull_modifier_from_single_movement(lex: &mut Lexer<Token>) -> Option<i32> {
@@ -204,21 +186,24 @@ fn was_command_escaped(lex: &mut Lexer<Token>) -> Option<bool> {
     Some(was_escaped)
 }
 
-#[oxi::test]
+#[test]
 fn basic_vertical_movements() {
-    const TEST_INPUT: &str = "10jkk5kj";
+    const TEST_INPUT: &str = "j10jkk5kj<CR>j";
     let mut lexer = Token::lexer(TEST_INPUT);
+    assert_eq!(lexer.next(), Some(Ok(Token::MoveVerticalBasic(1))));
     assert_eq!(lexer.next(), Some(Ok(Token::MoveVerticalBasic(10))));
     assert_eq!(lexer.next(), Some(Ok(Token::MoveVerticalBasic(1))));
     assert_eq!(lexer.next(), Some(Ok(Token::MoveVerticalBasic(1))));
     assert_eq!(lexer.next(), Some(Ok(Token::MoveVerticalBasic(5))));
     assert_eq!(lexer.next(), Some(Ok(Token::MoveVerticalBasic(1))));
+    assert_eq!(lexer.next(), Some(Ok(Token::UnhandledToken)));
+    assert_eq!(lexer.next(), Some(Ok(Token::MoveVerticalBasic(1))));
     assert_eq!(lexer.next(), None);
 }
 
-#[oxi::test]
+#[test]
 fn basic_horizontal_movements() {
-    const TEST_INPUT: &str = "10hll5lh";
+    const TEST_INPUT: &str = "10hll5lh<Esc>h";
     let mut lexer = Token::lexer(TEST_INPUT);
     assert_eq!(lexer.next(), Some(Ok(Token::MoveHorizontalBasic(10))));
     assert_eq!(lexer.slice(), "10h");
@@ -230,12 +215,15 @@ fn basic_horizontal_movements() {
     assert_eq!(lexer.slice(), "5l");
     assert_eq!(lexer.next(), Some(Ok(Token::MoveHorizontalBasic(1))));
     assert_eq!(lexer.slice(), "h");
+    assert_eq!(lexer.next(), Some(Ok(Token::UnhandledToken)));
+    assert_eq!(lexer.next(), Some(Ok(Token::MoveHorizontalBasic(1))));
+    assert_eq!(lexer.slice(), "h");
     assert_eq!(lexer.next(), None);
 }
 
-#[oxi::test]
+#[test]
 fn chunk_horizontal_movements() {
-    const TEST_INPUT: &str = "10weEb5b";
+    const TEST_INPUT: &str = "10weEb5b<CR>w";
     let mut lexer = Token::lexer(TEST_INPUT);
     assert_eq!(lexer.next(), Some(Ok(Token::MoveHorizontalChunk(10))));
     assert_eq!(lexer.slice(), "10w");
@@ -247,10 +235,13 @@ fn chunk_horizontal_movements() {
     assert_eq!(lexer.slice(), "b");
     assert_eq!(lexer.next(), Some(Ok(Token::MoveHorizontalChunk(5))));
     assert_eq!(lexer.slice(), "5b");
+    assert_eq!(lexer.next(), Some(Ok(Token::UnhandledToken)));
+    assert_eq!(lexer.next(), Some(Ok(Token::MoveHorizontalChunk(1))));
+    assert_eq!(lexer.slice(), "w");
     assert_eq!(lexer.next(), None);
 }
 
-#[oxi::test]
+#[test]
 fn mixed_input_movements_hb_hc_vm() {
     const TEST_INPUT: &str = "jj3jwwbE3wllkk";
     let mut lexer = Token::lexer(TEST_INPUT);
@@ -281,7 +272,7 @@ fn mixed_input_movements_hb_hc_vm() {
     assert_eq!(lexer.next(), None);
 }
 
-#[oxi::test]
+#[test]
 fn jump_horizontal_movements() {
     const TEST_INPUT: &str = "f3;;nFlnt3T3";
     let mut lexer = Token::lexer(TEST_INPUT);
@@ -296,7 +287,7 @@ fn jump_horizontal_movements() {
     assert_eq!(lexer.next(), None);
 }
 
-#[oxi::test]
+#[test]
 fn save_file_token() {
     const TEST_INPUT: &str = ":w<CR>";
     let mut lexer = Token::lexer(TEST_INPUT);
@@ -305,7 +296,7 @@ fn save_file_token() {
     assert_eq!(lexer.next(), None);
 }
 
-#[oxi::test]
+#[test]
 fn help_page_token_command_completed() {
     const TEST_INPUT: &str = ":help vimscape2007<CR>";
     let mut lexer = Token::lexer(TEST_INPUT);
@@ -314,11 +305,70 @@ fn help_page_token_command_completed() {
     assert_eq!(lexer.next(), None);
 }
 
-#[oxi::test]
+#[test]
 fn help_page_token_command_completed_false() {
     const TEST_INPUT: &str = ":help vimscape2007<Esc>";
     let mut lexer = Token::lexer(TEST_INPUT);
     assert_eq!(lexer.next(), Some(Ok(Token::HelpPage(true))));
     assert_eq!(lexer.slice(), TEST_INPUT);
+    assert_eq!(lexer.next(), None);
+}
+
+#[test]
+fn jump_to_line_number_gg() {
+    const TEST_INPUT: &str = "33gg";
+    let mut lexer = Token::lexer(TEST_INPUT);
+    assert_eq!(lexer.next(), Some(Ok(Token::JumpToLineNumber(33))));
+    assert_eq!(lexer.slice(), TEST_INPUT);
+    assert_eq!(lexer.next(), None);
+}
+
+#[test]
+fn jump_to_line_number_g() {
+    const TEST_INPUT: &str = "22G";
+    let mut lexer = Token::lexer(TEST_INPUT);
+    assert_eq!(lexer.next(), Some(Ok(Token::JumpToLineNumber(22))));
+    assert_eq!(lexer.slice(), TEST_INPUT);
+    assert_eq!(lexer.next(), None);
+}
+
+#[test]
+fn jump_to_line_number_command_mode() {
+    const TEST_INPUT: &str = ":322<CR>";
+    let mut lexer = Token::lexer(TEST_INPUT);
+    assert_eq!(lexer.next(), Some(Ok(Token::JumpToLineNumber(322))));
+    assert_eq!(lexer.slice(), ":322<CR>");
+    assert_eq!(lexer.next(), None);
+}
+
+#[test]
+fn jump_to_vertical() {
+    const TEST_INPUT: &str = "MHL<C-F><C-B>";
+    let mut lexer = Token::lexer(TEST_INPUT);
+    assert_eq!(lexer.next(), Some(Ok(Token::JumpToVertical)));
+    assert_eq!(lexer.next(), Some(Ok(Token::JumpToVertical)));
+    assert_eq!(lexer.next(), Some(Ok(Token::JumpToVertical)));
+    assert_eq!(lexer.next(), Some(Ok(Token::JumpToVertical)));
+    assert_eq!(lexer.next(), Some(Ok(Token::JumpToVertical)));
+    assert_eq!(lexer.next(), None);
+}
+
+#[test]
+fn jump_from_context() {
+    const TEST_INPUT: &str = ":<C-U>call<Space>matchit#Match_wrapper('',1,'n')<CR>m'zv";
+    let mut lexer = Token::lexer(TEST_INPUT);
+    assert_eq!(lexer.next(), Some(Ok(Token::JumpFromContext)));
+    assert_eq!(lexer.next(), None);
+}
+
+#[test]
+fn camera_movement() {
+    const TEST_INPUT: &str = "zzzzbzt<C-E><C-Y>";
+    let mut lexer = Token::lexer(TEST_INPUT);
+    assert_eq!(lexer.next(), Some(Ok(Token::CameraMovement)));
+    assert_eq!(lexer.next(), Some(Ok(Token::CameraMovement)));
+    assert_eq!(lexer.next(), Some(Ok(Token::CameraMovement)));
+    assert_eq!(lexer.next(), Some(Ok(Token::CameraMovement)));
+    assert_eq!(lexer.next(), Some(Ok(Token::CameraMovement)));
     assert_eq!(lexer.next(), None);
 }
