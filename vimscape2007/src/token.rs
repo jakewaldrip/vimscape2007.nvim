@@ -334,8 +334,9 @@ fn jump_to_line_number_g() {
 
 #[test]
 fn jump_to_line_number_command_mode() {
-    const TEST_INPUT: &str = ":322<CR>";
+    const TEST_INPUT: &str = "j:322<CR>";
     let mut lexer = Token::lexer(TEST_INPUT);
+    assert_eq!(lexer.next(), Some(Ok(Token::MoveVerticalBasic(1))));
     assert_eq!(lexer.next(), Some(Ok(Token::JumpToLineNumber(322))));
     assert_eq!(lexer.slice(), ":322<CR>");
     assert_eq!(lexer.next(), None);
