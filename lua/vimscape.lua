@@ -33,6 +33,10 @@ local sanitize_key = function(key)
 		return nil
 	end
 
+	if translated:match("<CR>") then
+		return "|enter|"
+	end
+
 	return translated
 end
 

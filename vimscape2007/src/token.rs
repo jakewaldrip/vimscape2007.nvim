@@ -1,10 +1,13 @@
 use logos::{Lexer, Logos};
-// use nvim_oxi::{self as oxi};
 
 // TODO Test callback methods individually? Woudn't hurt
 // TODO figure out macros
 // TODO Consider marks?
 // TODO consider buffers?
+// TODO figure out command mode magic
+// TODO figure out help page regex
+// TODO figure out save file
+// Potentially this could have something to do with the colon?
 #[derive(Logos, Debug, PartialEq)]
 pub enum Token {
     #[regex(
@@ -26,12 +29,9 @@ pub enum Token {
     #[token("_g_")]
     JumpToHorizontal,
 
-    // TODO
-    // In the middle of tests, fails if any input is after it which obviously is a problem
-    // More widespread than just here, seems to be related to input after <CR>
     #[regex(r"(?:[1-9]{1}\d{0,})?(?:gg|G)", pull_modifier_from_arbitrary_location)]
     #[regex(
-        r":[1-9]{1}\d{0,}<CR>",
+        r":[1-9]{1}\d{0,}\|enter\|",
         pull_modifier_from_arbitrary_location,
         priority = 20
     )]
@@ -42,7 +42,7 @@ pub enum Token {
     JumpToVertical,
 
     // % renders as the token below
-    #[token(":<C-U>call<Space>matchit#Match_wrapper('',1,'n')<CR>m'zv")]
+    #[token(":<C-U>call<Space>matchit#Match_wrapper('',1,'n')|enter|m'zv")]
     JumpFromContext,
 
     // zz renders as zzz
@@ -60,12 +60,6 @@ pub enum Token {
     // Needs local testing
     #[regex(r"TODO1", was_command_escaped)]
     VisualModeMagic(bool),
-
-    // Needs tests
-    // Captures all commands, other categories
-    // capture commands that are more relevant to them
-    #[regex(r":.{1,}<CR>", was_command_escaped)]
-    CommandModeMagic(bool),
 
     // Needs tests
     // x renders as xdl
@@ -114,8 +108,8 @@ pub enum Token {
     #[token(".")]
     DotRepeat,
 
-    // Needs tests
-    #[regex(r"/.{1,}(?:<CR>|<Esc>)", was_command_escaped)]
+    // // Needs tests
+    #[regex(r"/.{1,}(?:\|enter\||<Esc>)", was_command_escaped)]
     CommandSearch(bool),
 
     // Needs tests
@@ -129,15 +123,8 @@ pub enum Token {
     #[regex(r"(?:[1-9]{1}\d{0,})?x", pull_modifier_from_single_movement)]
     DeleteText(i32),
 
-    #[token(":w<CR>", priority = 20)]
-    SaveFile,
-
-    // Needs tests
-    #[regex(":(?:help|h) .{1,}(?:<CR>|<Esc>)(?:<C-W>(?:c)?)?", was_command_escaped)]
-    HelpPage(bool),
-
-    #[token("[a-zA-Z0-9_:]", priority = 1)]
-    #[token("<CR>", priority = 1)]
+    #[token("[a-zA-Z0-9_:<>]", priority = 1)]
+    #[token("|enter|", priority = 1)]
     #[token("<Esc>", priority = 1)]
     UnhandledToken,
 }
@@ -188,7 +175,7 @@ fn was_command_escaped(lex: &mut Lexer<Token>) -> Option<bool> {
 
 #[test]
 fn basic_vertical_movements() {
-    const TEST_INPUT: &str = "j10jkk5kj<CR>j";
+    const TEST_INPUT: &str = "j10jkk5kjj";
     let mut lexer = Token::lexer(TEST_INPUT);
     assert_eq!(lexer.next(), Some(Ok(Token::MoveVerticalBasic(1))));
     assert_eq!(lexer.next(), Some(Ok(Token::MoveVerticalBasic(10))));
@@ -196,7 +183,6 @@ fn basic_vertical_movements() {
     assert_eq!(lexer.next(), Some(Ok(Token::MoveVerticalBasic(1))));
     assert_eq!(lexer.next(), Some(Ok(Token::MoveVerticalBasic(5))));
     assert_eq!(lexer.next(), Some(Ok(Token::MoveVerticalBasic(1))));
-    assert_eq!(lexer.next(), Some(Ok(Token::UnhandledToken)));
     assert_eq!(lexer.next(), Some(Ok(Token::MoveVerticalBasic(1))));
     assert_eq!(lexer.next(), None);
 }
@@ -223,7 +209,7 @@ fn basic_horizontal_movements() {
 
 #[test]
 fn chunk_horizontal_movements() {
-    const TEST_INPUT: &str = "10weEb5b<CR>w";
+    const TEST_INPUT: &str = "10weEb5bw";
     let mut lexer = Token::lexer(TEST_INPUT);
     assert_eq!(lexer.next(), Some(Ok(Token::MoveHorizontalChunk(10))));
     assert_eq!(lexer.slice(), "10w");
@@ -235,7 +221,6 @@ fn chunk_horizontal_movements() {
     assert_eq!(lexer.slice(), "b");
     assert_eq!(lexer.next(), Some(Ok(Token::MoveHorizontalChunk(5))));
     assert_eq!(lexer.slice(), "5b");
-    assert_eq!(lexer.next(), Some(Ok(Token::UnhandledToken)));
     assert_eq!(lexer.next(), Some(Ok(Token::MoveHorizontalChunk(1))));
     assert_eq!(lexer.slice(), "w");
     assert_eq!(lexer.next(), None);
@@ -288,33 +273,6 @@ fn jump_horizontal_movements() {
 }
 
 #[test]
-fn save_file_token() {
-    const TEST_INPUT: &str = ":w<CR>";
-    let mut lexer = Token::lexer(TEST_INPUT);
-    assert_eq!(lexer.next(), Some(Ok(Token::SaveFile)));
-    assert_eq!(lexer.slice(), TEST_INPUT);
-    assert_eq!(lexer.next(), None);
-}
-
-#[test]
-fn help_page_token_command_completed() {
-    const TEST_INPUT: &str = ":help vimscape2007<CR>";
-    let mut lexer = Token::lexer(TEST_INPUT);
-    assert_eq!(lexer.next(), Some(Ok(Token::HelpPage(false))));
-    assert_eq!(lexer.slice(), TEST_INPUT);
-    assert_eq!(lexer.next(), None);
-}
-
-#[test]
-fn help_page_token_command_completed_false() {
-    const TEST_INPUT: &str = ":help vimscape2007<Esc>";
-    let mut lexer = Token::lexer(TEST_INPUT);
-    assert_eq!(lexer.next(), Some(Ok(Token::HelpPage(true))));
-    assert_eq!(lexer.slice(), TEST_INPUT);
-    assert_eq!(lexer.next(), None);
-}
-
-#[test]
 fn jump_to_line_number_gg() {
     const TEST_INPUT: &str = "33gg";
     let mut lexer = Token::lexer(TEST_INPUT);
@@ -325,20 +283,32 @@ fn jump_to_line_number_gg() {
 
 #[test]
 fn jump_to_line_number_g() {
-    const TEST_INPUT: &str = "22G";
+    const TEST_INPUT: &str = "22Gj";
     let mut lexer = Token::lexer(TEST_INPUT);
     assert_eq!(lexer.next(), Some(Ok(Token::JumpToLineNumber(22))));
-    assert_eq!(lexer.slice(), TEST_INPUT);
+    assert_eq!(lexer.slice(), "22G");
+    assert_eq!(lexer.next(), Some(Ok(Token::MoveVerticalBasic(1))));
+    assert_eq!(lexer.slice(), "j");
     assert_eq!(lexer.next(), None);
 }
 
 #[test]
 fn jump_to_line_number_command_mode() {
-    const TEST_INPUT: &str = "j:322<CR>";
+    const TEST_INPUT: &str = "j:322|enter|";
     let mut lexer = Token::lexer(TEST_INPUT);
     assert_eq!(lexer.next(), Some(Ok(Token::MoveVerticalBasic(1))));
     assert_eq!(lexer.next(), Some(Ok(Token::JumpToLineNumber(322))));
-    assert_eq!(lexer.slice(), ":322<CR>");
+    assert_eq!(lexer.slice(), ":322|enter|");
+    assert_eq!(lexer.next(), None);
+}
+
+#[test]
+fn jump_to_line_number_command_mode_cr_issue_edition() {
+    const TEST_INPUT: &str = "j:322|enter|j";
+    let mut lexer = Token::lexer(TEST_INPUT);
+    assert_eq!(lexer.next(), Some(Ok(Token::MoveVerticalBasic(1))));
+    assert_eq!(lexer.next(), Some(Ok(Token::JumpToLineNumber(322))));
+    assert_eq!(lexer.next(), Some(Ok(Token::MoveVerticalBasic(1))));
     assert_eq!(lexer.next(), None);
 }
 
@@ -356,7 +326,7 @@ fn jump_to_vertical() {
 
 #[test]
 fn jump_from_context() {
-    const TEST_INPUT: &str = ":<C-U>call<Space>matchit#Match_wrapper('',1,'n')<CR>m'zv";
+    const TEST_INPUT: &str = ":<C-U>call<Space>matchit#Match_wrapper('',1,'n')|enter|m'zv";
     let mut lexer = Token::lexer(TEST_INPUT);
     assert_eq!(lexer.next(), Some(Ok(Token::JumpFromContext)));
     assert_eq!(lexer.next(), None);
