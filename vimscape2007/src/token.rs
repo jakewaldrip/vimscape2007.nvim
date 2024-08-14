@@ -8,6 +8,7 @@ use logos::{Lexer, Logos};
 // TODO figure out help page regex
 // TODO figure out save file
 // Potentially this could have something to do with the colon?
+// TODO figure out visual mode
 #[derive(Logos, Debug, PartialEq)]
 pub enum Token {
     #[regex(
@@ -51,15 +52,8 @@ pub enum Token {
     CameraMovement,
 
     // Needs tests
-    #[regex(r"<C-W>(?:[svwqx=hljkHLJK]|<C-H>|<C-J>|<C-K>|<C-L>)")]
+    #[regex(r"(?:<C-W>[svwqx=hljkHLJK])|<C-H>|<C-J>|<C-K>|<C-L>")]
     WindowManagement,
-
-    // Needs tests
-    // Anything in visual mode will go here, maybe split this out more into basic + advanced?
-    // Needs major brainstorming here
-    // Needs local testing
-    #[regex(r"TODO1", was_command_escaped)]
-    VisualModeMagic(bool),
 
     // Needs tests
     // x renders as xdl
@@ -341,5 +335,33 @@ fn camera_movement() {
     assert_eq!(lexer.next(), Some(Ok(Token::CameraMovement)));
     assert_eq!(lexer.next(), Some(Ok(Token::CameraMovement)));
     assert_eq!(lexer.next(), Some(Ok(Token::CameraMovement)));
+    assert_eq!(lexer.next(), None);
+}
+
+// <C-W>(?:[svwqx=hljkHLJK]|<C-H>|<C-J>|<C-K>|<C-L>)
+#[test]
+fn window_management() {
+    const TEST_INPUT: &str = "<C-W>s<C-W>vkk<C-W>w<C-W>q<C-W>x<C-W>=<C-W>h<C-W>j<C-W>k<C-W>l<C-W>H<C-W>L<C-W>J<C-W>K<C-H><C-J><C-K><C-L>";
+    let mut lexer = Token::lexer(TEST_INPUT);
+    assert_eq!(lexer.next(), Some(Ok(Token::WindowManagement)));
+    assert_eq!(lexer.next(), Some(Ok(Token::WindowManagement)));
+    assert_eq!(lexer.next(), Some(Ok(Token::MoveVerticalBasic(1))));
+    assert_eq!(lexer.next(), Some(Ok(Token::MoveVerticalBasic(1))));
+    assert_eq!(lexer.next(), Some(Ok(Token::WindowManagement)));
+    assert_eq!(lexer.next(), Some(Ok(Token::WindowManagement)));
+    assert_eq!(lexer.next(), Some(Ok(Token::WindowManagement)));
+    assert_eq!(lexer.next(), Some(Ok(Token::WindowManagement)));
+    assert_eq!(lexer.next(), Some(Ok(Token::WindowManagement)));
+    assert_eq!(lexer.next(), Some(Ok(Token::WindowManagement)));
+    assert_eq!(lexer.next(), Some(Ok(Token::WindowManagement)));
+    assert_eq!(lexer.next(), Some(Ok(Token::WindowManagement)));
+    assert_eq!(lexer.next(), Some(Ok(Token::WindowManagement)));
+    assert_eq!(lexer.next(), Some(Ok(Token::WindowManagement)));
+    assert_eq!(lexer.next(), Some(Ok(Token::WindowManagement)));
+    assert_eq!(lexer.next(), Some(Ok(Token::WindowManagement)));
+    assert_eq!(lexer.next(), Some(Ok(Token::WindowManagement)));
+    assert_eq!(lexer.next(), Some(Ok(Token::WindowManagement)));
+    assert_eq!(lexer.next(), Some(Ok(Token::WindowManagement)));
+    assert_eq!(lexer.next(), Some(Ok(Token::WindowManagement)));
     assert_eq!(lexer.next(), None);
 }
