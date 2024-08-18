@@ -51,17 +51,15 @@ pub enum Token {
     #[regex(r"(?:<C-E>|<C-Y>)")]
     CameraMovement,
 
-    // Needs tests
     #[regex(r"(?:<C-W>[svwqx=hljkHLJK])|<C-H>|<C-J>|<C-K>|<C-L>")]
     WindowManagement,
 
-    // Needs tests
     // x renders as xdl
-    #[regex(r"(?:[1-9]{1}\d{0,})?xdl")]
-    #[regex(r"(?:[1-9]{1}\d{0,})?J")]
-    #[regex(r"(?:[1-9]{1}\d{0,})?gJ")]
-    #[regex(r"(?:[1-9]{1}\d{0,})?r.")]
-    TextManipulationBasic,
+    #[regex(r"(?:[1-9]{1}\d{0,})?xdl", pull_modifier_from_arbitrary_location)]
+    #[regex(r"(?:[1-9]{1}\d{0,})?J", pull_modifier_from_arbitrary_location)]
+    #[regex(r"(?:[1-9]{1}\d{0,})?gJ", pull_modifier_from_arbitrary_location)]
+    #[regex(r"(?:[1-9]{1}\d{0,})?r.", pull_modifier_from_arbitrary_location)]
+    TextManipulationBasic(i32),
 
     // Needs tests
     #[regex(r"R.{0,}<Esc>")]
@@ -338,7 +336,6 @@ fn camera_movement() {
     assert_eq!(lexer.next(), None);
 }
 
-// <C-W>(?:[svwqx=hljkHLJK]|<C-H>|<C-J>|<C-K>|<C-L>)
 #[test]
 fn window_management() {
     const TEST_INPUT: &str = "<C-W>s<C-W>vkk<C-W>w<C-W>q<C-W>x<C-W>=<C-W>h<C-W>j<C-W>k<C-W>l<C-W>H<C-W>L<C-W>J<C-W>K<C-H><C-J><C-K><C-L>";
@@ -363,5 +360,16 @@ fn window_management() {
     assert_eq!(lexer.next(), Some(Ok(Token::WindowManagement)));
     assert_eq!(lexer.next(), Some(Ok(Token::WindowManagement)));
     assert_eq!(lexer.next(), Some(Ok(Token::WindowManagement)));
+    assert_eq!(lexer.next(), None);
+}
+
+#[test]
+fn text_manipulation_basic() {
+    const TEST_INPUT: &str = "12xdlJ3rp4gJ";
+    let mut lexer = Token::lexer(TEST_INPUT);
+    assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationBasic(12))));
+    assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationBasic(1))));
+    assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationBasic(3))));
+    assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationBasic(4))));
     assert_eq!(lexer.next(), None);
 }
