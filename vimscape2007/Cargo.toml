@@ -8,5 +8,6 @@ crate-type = ["cdylib"]
 
 [dependencies]
 nvim-oxi = { version = "0.5.1", features = ["neovim-0-9", "test"] }
-logos = "0.14.0"
+# logos = { version = "0.14.1", features = ["debug"] }
+logos = "0.14.1"
 # logos = { git = "https://github.com/maciejhirsz/logos.git#afreeland:debug-graph", features = ["debug"]}

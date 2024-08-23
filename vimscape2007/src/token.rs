@@ -62,7 +62,7 @@ pub enum Token {
     TextManipulationBasic(i32),
 
     // Needs tests
-    #[regex(r"R.{0,}<Esc>")]
+    #[regex(r"R[A-Za-z0-9]{0,}<Esc>")]
     #[regex(r"g[~uU](?:[1-9]{1}\d{0,})?[wWeEbB$^0]", priority = 20)]
     #[regex(r"g[~uU](?:[1-9]{1}\d{0,})?[fFtT].", priority = 20)]
     #[regex(r"ci\)\)<C-\\><C-N>zvzvv")]
@@ -120,6 +120,11 @@ pub enum Token {
     #[token("<Esc>", priority = 1)]
     UnhandledToken,
 }
+
+// This is used if we have a match fail, but can match a more specific regex and find it
+// https://github.com/maciejhirsz/logos/issues/315
+#[derive(Logos, Debug, PartialEq)]
+enum RecoveryToken {}
 
 fn pull_modifier_from_single_movement(lex: &mut Lexer<Token>) -> Option<i32> {
     let slice = lex.slice();
@@ -371,5 +376,26 @@ fn text_manipulation_basic() {
     assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationBasic(1))));
     assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationBasic(3))));
     assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationBasic(4))));
+    assert_eq!(lexer.next(), None);
+}
+
+#[test]
+fn text_manipulation_advanced_1() {
+    const TEST_INPUT: &str = "c$$gu3wgU44$";
+    let mut lexer = Token::lexer(TEST_INPUT);
+    assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationAdvanced)));
+    assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationAdvanced)));
+    assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationAdvanced)));
+    assert_eq!(lexer.next(), None);
+}
+
+#[test]
+fn text_manipulation_advanced_2() {
+    const TEST_INPUT: &str = "Rxxx<Esc>R3<Esc>R<Esc>";
+    let mut lexer = Token::lexer(TEST_INPUT);
+    assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationAdvanced)));
+    assert_eq!(lexer.slice(), "Rxxx<Esc>");
+    assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationAdvanced)));
+    assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationAdvanced)));
     assert_eq!(lexer.next(), None);
 }
