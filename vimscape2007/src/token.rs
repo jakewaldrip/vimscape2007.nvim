@@ -61,7 +61,6 @@ pub enum Token {
     #[regex(r"(?:[1-9]{1}\d{0,})?r.", pull_modifier_from_arbitrary_location)]
     TextManipulationBasic(i32),
 
-    // Needs tests
     #[regex(r"R[A-Za-z0-9]{0,}<Esc>")]
     #[regex(r"g[~uU](?:[1-9]{1}\d{0,})?[wWeEbB$^0]", priority = 20)]
     #[regex(r"g[~uU](?:[1-9]{1}\d{0,})?[fFtT].", priority = 20)]
@@ -168,6 +167,13 @@ fn was_command_escaped(lex: &mut Lexer<Token>) -> Option<bool> {
     let slice = lex.slice();
     let was_escaped = slice.contains("<Esc>");
     Some(was_escaped)
+}
+
+#[test]
+fn no_input_as_none() {
+    const TEST_INPUT: &str = "";
+    let mut lexer = Token::lexer(TEST_INPUT);
+    assert_eq!(lexer.next(), None);
 }
 
 #[test]
@@ -395,6 +401,53 @@ fn text_manipulation_advanced_2() {
     let mut lexer = Token::lexer(TEST_INPUT);
     assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationAdvanced)));
     assert_eq!(lexer.slice(), "Rxxx<Esc>");
+    assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationAdvanced)));
+    assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationAdvanced)));
+    assert_eq!(lexer.next(), None);
+}
+
+#[test]
+fn text_manipulation_advanced_3() {
+    const TEST_INPUT: &str = "gu3fgguF.";
+    let mut lexer = Token::lexer(TEST_INPUT);
+    assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationAdvanced)));
+    assert_eq!(lexer.slice(), "gu3fg");
+    assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationAdvanced)));
+    assert_eq!(lexer.slice(), "guF.");
+    assert_eq!(lexer.next(), None);
+}
+
+#[test]
+fn text_manipulation_advanced_tokens() {
+    const TEST_INPUT: &str = "c$$Cc$ceecwwsclSccciwwiwcawwaw";
+    let mut lexer = Token::lexer(TEST_INPUT);
+    assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationAdvanced)));
+    assert_eq!(lexer.slice(), "c$$");
+    assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationAdvanced)));
+    assert_eq!(lexer.slice(), "Cc$");
+    assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationAdvanced)));
+    assert_eq!(lexer.slice(), "cee");
+    assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationAdvanced)));
+    assert_eq!(lexer.slice(), "cww");
+    assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationAdvanced)));
+    assert_eq!(lexer.slice(), "scl");
+    assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationAdvanced)));
+    assert_eq!(lexer.slice(), "Scc");
+    assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationAdvanced)));
+    assert_eq!(lexer.slice(), "ciwwiw");
+    assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationAdvanced)));
+    assert_eq!(lexer.slice(), "cawwaw");
+    assert_eq!(lexer.next(), None);
+}
+
+#[test]
+fn text_manipulation_advanced_change_arounds() {
+    const TEST_INPUT: &str = r#"ci))<C-\><C-N>zvzvvci((<C-\><C-N>zvzvvci[[<C-\><C-N>zvzvvci]]<C-\><C-N>zvzvvci{{<C-\><C-N>zvzvvci}}<C-\><C-N>zvzvv"#;
+    let mut lexer = Token::lexer(TEST_INPUT);
+    assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationAdvanced)));
+    assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationAdvanced)));
+    assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationAdvanced)));
+    assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationAdvanced)));
     assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationAdvanced)));
     assert_eq!(lexer.next(), Some(Ok(Token::TextManipulationAdvanced)));
     assert_eq!(lexer.next(), None);
