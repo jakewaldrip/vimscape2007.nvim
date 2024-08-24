@@ -4,7 +4,6 @@ use logos::{Lexer, Logos};
 // TODO Consider marks?
 // TODO consider buffers?
 // TODO figure out command mode magic
-// TODO figure out help page regex
 // TODO figure out save file
 // Potentially this could have something to do with the colon?
 // TODO figure out visual mode
