@@ -113,6 +113,9 @@ pub enum Token {
     #[regex(r":(?:h|help) [a-zA-z0-9]{0,}(?:\|enter\||<Esc>)", was_command_escaped)]
     HelpPage(bool),
 
+    #[regex(r#":w(?:\|enter\||<Esc>)"#, was_command_escaped)]
+    SaveFile(bool),
+
     #[regex(r"[a-zA-Z0-9_:<>]", priority = 1)]
     #[token("|enter|", priority = 1)]
     #[token("<Esc>", priority = 1)]
@@ -543,5 +546,15 @@ fn help_page() {
     assert_eq!(lexer.next(), Some(Ok(Token::MoveVerticalBasic(1))));
     assert_eq!(lexer.next(), Some(Ok(Token::MoveVerticalBasic(1))));
     assert_eq!(lexer.next(), Some(Ok(Token::HelpPage(false))));
+    assert_eq!(lexer.next(), None);
+}
+
+#[test]
+fn save_file() {
+    const TEST_INPUT: &str = ":w<Esc>j:w|enter|";
+    let mut lexer = Token::lexer(TEST_INPUT);
+    assert_eq!(lexer.next(), Some(Ok(Token::SaveFile(true))));
+    assert_eq!(lexer.next(), Some(Ok(Token::MoveVerticalBasic(1))));
+    assert_eq!(lexer.next(), Some(Ok(Token::SaveFile(false))));
     assert_eq!(lexer.next(), None);
 }
