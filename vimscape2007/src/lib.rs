@@ -2,6 +2,9 @@ use crate::{skills::Skills, token::Token};
 use logos::Logos;
 use nvim_oxi::{self as oxi, print, Dictionary, Function};
 
+// type Error = (String, Span);
+// type Result<T> = std::result::Result<T, Error>;
+
 mod skills;
 mod token;
 
@@ -18,54 +21,116 @@ fn process_batch(input: String) -> bool {
     let mut skills: Vec<Skills> = Vec::new();
 
     while let Some(token) = lexer.next() {
-        match token {
-            Ok(Token::MoveVerticalBasic(modifier)) => {
-                let base_experience = 1;
-                let experience = modifier * base_experience;
-                skills.push(Skills::VerticalNavigation(experience))
-            }
-            Ok(Token::MoveHorizontalBasic(modifier)) => {
-                let base_experience = 1;
-                let experience = modifier * base_experience;
-                skills.push(Skills::HorizontalNavigation(experience))
-            }
-            Ok(Token::MoveVerticalChunk) => {
-                let base_experience = 10;
-                skills.push(Skills::VerticalNavigation(base_experience))
-            }
-            Ok(Token::MoveHorizontalChunk(modifier)) => {
-                let base_experience = 5;
-                let experience = modifier * base_experience;
-                skills.push(Skills::HorizontalNavigation(experience))
-            }
-            Ok(Token::JumpToHorizontal) => {}
-            Ok(Token::JumpToLineNumber(line_number)) => {}
-            Ok(Token::JumpToVertical) => {}
-            Ok(Token::JumpFromContext) => {}
-            Ok(Token::CameraMovement) => {}
-            Ok(Token::WindowManagement) => {}
-            Ok(Token::TextManipulationBasic(modifier)) => {}
-            Ok(Token::TextManipulationAdvanced) => {}
-            Ok(Token::YankPaste) => {}
-            Ok(Token::UndoRedo) => {}
-            Ok(Token::DotRepeat) => {}
-            Ok(Token::CommandSearch(was_command_escaped)) => {}
-            Ok(Token::DeleteText(modifier)) => {}
-            Ok(Token::HelpPage(was_command_escaped)) => {}
-            Ok(Token::SaveFile(was_command_escaped)) => {}
-            Ok(Token::SaveFile(was_command_escaped)) => {}
-            _ => {
-                println!("Failed  to parse: {}", lexer.slice());
-                continue;
-            }
+        if let Some(result) = parse_action_into_skill(token) {
+            println!("Parsed {},into {:?} skill", lexer.slice(), result);
+            skills.push(result);
+        } else {
+            println!("Failed  to parse: {}", lexer.slice());
         }
     }
 
+    println!("Finished parsing, final skills: {:?}", skills);
+
     true
+}
+
+fn parse_action_into_skill(token: Result<Token, ()>) -> Option<Skills> {
+    match token {
+        Ok(Token::MoveVerticalBasic(modifier)) => {
+            let base_experience = 1;
+            let experience = modifier * base_experience;
+            return Some(Skills::VerticalNavigation(experience));
+        }
+        Ok(Token::MoveHorizontalBasic(modifier)) => {
+            let base_experience = 1;
+            let experience = modifier * base_experience;
+            return Some(Skills::HorizontalNavigation(experience));
+        }
+        Ok(Token::MoveVerticalChunk) => {
+            let base_experience = 10;
+            return Some(Skills::VerticalNavigation(base_experience));
+        }
+        Ok(Token::MoveHorizontalChunk(modifier)) => {
+            let base_experience = 5;
+            let experience = modifier * base_experience;
+            return Some(Skills::HorizontalNavigation(experience));
+        }
+        Ok(Token::JumpToHorizontal) => {
+            let base_experience = 10;
+            return Some(Skills::HorizontalNavigation(base_experience));
+        }
+        Ok(Token::JumpToLineNumber(_line_number)) => {
+            let base_experience = 10;
+            return Some(Skills::VerticalNavigation(base_experience));
+        }
+        Ok(Token::JumpToVertical) => {
+            let base_experience = 10;
+            return Some(Skills::VerticalNavigation(base_experience));
+        }
+        Ok(Token::JumpFromContext) => {
+            let base_experience = 10;
+            return Some(Skills::CodeFlow(base_experience));
+        }
+        Ok(Token::CameraMovement) => {
+            let base_experience = 10;
+            return Some(Skills::CameraMovement(base_experience));
+        }
+        Ok(Token::WindowManagement) => {
+            let base_experience = 10;
+            return Some(Skills::WindowManagement(base_experience));
+        }
+        Ok(Token::TextManipulationBasic(modifier)) => {
+            let base_experience = 1;
+            let experience = base_experience * modifier;
+            return Some(Skills::TextManipulation(experience));
+        }
+        Ok(Token::TextManipulationAdvanced) => {
+            let base_experience = 10;
+            return Some(Skills::TextManipulation(base_experience));
+        }
+        Ok(Token::YankPaste) => {
+            let base_experience = 10;
+            return Some(Skills::Clipboard(base_experience));
+        }
+        Ok(Token::UndoRedo) => {
+            let base_experience = 10;
+            return Some(Skills::Clipboard(base_experience));
+        }
+        Ok(Token::DotRepeat) => {
+            let base_experience = 10;
+            return Some(Skills::Finesse(base_experience));
+        }
+        Ok(Token::CommandSearch(was_command_escaped)) => {
+            let base_experience = if was_command_escaped { 1 } else { 10 };
+            return Some(Skills::Search(base_experience));
+        }
+        Ok(Token::DeleteText(modifier)) => {
+            let base_experience = 1;
+            let experience = base_experience * modifier;
+            return Some(Skills::TextManipulation(experience));
+        }
+        Ok(Token::HelpPage(was_command_escaped)) => {
+            let base_experience = if was_command_escaped { 1 } else { 10 };
+            return Some(Skills::Knowledge(base_experience));
+        }
+        Ok(Token::SaveFile(was_command_escaped)) => {
+            let base_experience = if was_command_escaped { 1 } else { 10 };
+            return Some(Skills::Saving(base_experience));
+        }
+        _ => {
+            return None;
+        }
+    }
 }
 
 #[oxi::test]
 fn process_batch_succeeds_base_case() {
     let result = process_batch("".to_string());
+    assert_eq!(result, true);
+}
+
+#[oxi::test]
+fn process_batch_prints_tokens_test() {
+    let result = process_batch("jhkkl".to_string());
     assert_eq!(result, true);
 }
