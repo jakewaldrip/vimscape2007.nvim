@@ -1,10 +1,8 @@
-use crate::{skills::Skills, token::Token};
+use crate::{db::create_tables, skills::Skills, token::Token};
 use logos::Logos;
 use nvim_oxi::{self as oxi, print, Dictionary, Function};
 
-// type Error = (String, Span);
-// type Result<T> = std::result::Result<T, Error>;
-
+mod db;
 mod skills;
 mod token;
 
@@ -30,6 +28,11 @@ fn process_batch(input: String) -> bool {
     }
 
     println!("Finished parsing, final skills: {:?}", skills);
+
+    // create the table set
+    // loop over skills and write result to table
+    // optimization potential, do it in a single query lol
+    let _ = create_tables();
 
     true
 }
