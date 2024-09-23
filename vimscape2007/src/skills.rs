@@ -12,3 +12,23 @@ pub enum Skills {
     Knowledge(i32),
     Saving(i32),
 }
+
+impl Skills {
+    pub fn to_str_vec() -> Vec<String> {
+        let skills_strs: Vec<String> = [
+            "VerticalNavigation".to_string(),
+            "HorizontalNavigation".to_string(),
+            "CodeFlow".to_string(),
+            "CameraMovement".to_string(),
+            "WindowManagement".to_string(),
+            "TextManipulation".to_string(),
+            "Clipboard".to_string(),
+            "Finesse".to_string(),
+            "Search".to_string(),
+            "Knowledge".to_string(),
+            "Saving".to_string(),
+        ]
+        .to_vec();
+        skills_strs
+    }
+}
