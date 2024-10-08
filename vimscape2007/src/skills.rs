@@ -16,19 +16,35 @@ pub enum Skills {
 impl Skills {
     pub fn to_str_vec() -> Vec<String> {
         let skills_strs: Vec<String> = [
-            "VerticalNavigation".to_string(),
-            "HorizontalNavigation".to_string(),
-            "CodeFlow".to_string(),
-            "CameraMovement".to_string(),
-            "WindowManagement".to_string(),
-            "TextManipulation".to_string(),
-            "Clipboard".to_string(),
-            "Finesse".to_string(),
-            "Search".to_string(),
-            "Knowledge".to_string(),
-            "Saving".to_string(),
+            Skills::to_str(Skills::VerticalNavigation(0)),
+            Skills::to_str(Skills::HorizontalNavigation(0)),
+            Skills::to_str(Skills::CodeFlow(0)),
+            Skills::to_str(Skills::CameraMovement(0)),
+            Skills::to_str(Skills::WindowManagement(0)),
+            Skills::to_str(Skills::TextManipulation(0)),
+            Skills::to_str(Skills::Clipboard(0)),
+            Skills::to_str(Skills::Finesse(0)),
+            Skills::to_str(Skills::Search(0)),
+            Skills::to_str(Skills::Knowledge(0)),
+            Skills::to_str(Skills::Saving(0)),
         ]
         .to_vec();
         skills_strs
+    }
+
+    pub fn to_str(self) -> String {
+        match self {
+            Skills::VerticalNavigation(_) => "VerticalNavigation".to_string(),
+            Skills::HorizontalNavigation(_) => "HorizontalNavigation".to_string(),
+            Skills::CodeFlow(_) => "CodeFlow".to_string(),
+            Skills::CameraMovement(_) => "CameraMovement".to_string(),
+            Skills::WindowManagement(_) => "WindowManagement".to_string(),
+            Skills::TextManipulation(_) => "TextManipulation".to_string(),
+            Skills::Clipboard(_) => "Clipboard".to_string(),
+            Skills::Finesse(_) => "Finesse".to_string(),
+            Skills::Search(_) => "Search".to_string(),
+            Skills::Knowledge(_) => "Knowledge".to_string(),
+            Skills::Saving(_) => "Saving".to_string(),
+        }
     }
 }
