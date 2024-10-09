@@ -18,6 +18,8 @@ fn process_batch(input: String) -> bool {
     let mut lexer = Token::lexer(&input);
     let mut skills: Vec<Skills> = Vec::new();
 
+    // TODO, next step
+    // Don't push to a vec, push to a hash map instead and increment xp value
     while let Some(token) = lexer.next() {
         if let Some(result) = parse_action_into_skill(token) {
             println!("Parsed {},into {:?} skill", lexer.slice(), result);
