@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{db::create_tables, skills::Skills, token::Token};
 use logos::Logos;
 use nvim_oxi::{self as oxi, print, Dictionary, Function};
@@ -16,14 +18,19 @@ fn vimscape2007() -> nvim_oxi::Result<Dictionary> {
 fn process_batch(input: String) -> bool {
     print!("{}", input);
     let mut lexer = Token::lexer(&input);
-    let mut skills: Vec<Skills> = Vec::new();
+    let mut skills: HashMap<String, i32> = HashMap::new();
 
     // TODO, next step
     // Don't push to a vec, push to a hash map instead and increment xp value
     while let Some(token) = lexer.next() {
         if let Some(result) = parse_action_into_skill(token) {
             println!("Parsed {},into {:?} skill", lexer.slice(), result);
-            skills.push(result);
+            let skill_str = result.to_str();
+            match skills.get(&*skill_str) {
+                // find out how to get the value out of skills to increment here
+                Some(exp) => skills.insert(skill_str, )
+                None => todo!(),
+            };
         } else {
             println!("Failed  to parse: {}", lexer.slice());
         }
