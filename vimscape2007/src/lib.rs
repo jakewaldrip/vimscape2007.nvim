@@ -20,16 +20,14 @@ fn process_batch(input: String) -> bool {
     let mut lexer = Token::lexer(&input);
     let mut skills: HashMap<String, i32> = HashMap::new();
 
-    // TODO, next step
-    // Don't push to a vec, push to a hash map instead and increment xp value
     while let Some(token) = lexer.next() {
         if let Some(result) = parse_action_into_skill(token) {
             println!("Parsed {},into {:?} skill", lexer.slice(), result);
             let skill_str = result.to_str();
+            let new_exp = result.get_exp_from_skill();
             match skills.get(&*skill_str) {
-                // find out how to get the value out of skills to increment here
-                Some(exp) => skills.insert(skill_str, )
-                None => todo!(),
+                Some(total_exp) => skills.insert(skill_str, new_exp + total_exp),
+                None => skills.insert(skill_str, new_exp),
             };
         } else {
             println!("Failed  to parse: {}", lexer.slice());
@@ -38,10 +36,9 @@ fn process_batch(input: String) -> bool {
 
     println!("Finished parsing, final skills: {:?}", skills);
 
-    // create the table set
-    // loop over skills and write result to table
-    // optimization potential, do it in a single query lol
     let _ = create_tables();
+
+    // iter over hash map, write each to table
 
     true
 }

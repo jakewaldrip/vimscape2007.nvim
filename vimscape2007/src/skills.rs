@@ -16,23 +16,23 @@ pub enum Skills {
 impl Skills {
     pub fn to_str_vec() -> Vec<String> {
         let skills_strs: Vec<String> = [
-            Skills::to_str(Skills::VerticalNavigation(0)),
-            Skills::to_str(Skills::HorizontalNavigation(0)),
-            Skills::to_str(Skills::CodeFlow(0)),
-            Skills::to_str(Skills::CameraMovement(0)),
-            Skills::to_str(Skills::WindowManagement(0)),
-            Skills::to_str(Skills::TextManipulation(0)),
-            Skills::to_str(Skills::Clipboard(0)),
-            Skills::to_str(Skills::Finesse(0)),
-            Skills::to_str(Skills::Search(0)),
-            Skills::to_str(Skills::Knowledge(0)),
-            Skills::to_str(Skills::Saving(0)),
+            Skills::to_str(&Skills::VerticalNavigation(0)),
+            Skills::to_str(&Skills::HorizontalNavigation(0)),
+            Skills::to_str(&Skills::CodeFlow(0)),
+            Skills::to_str(&Skills::CameraMovement(0)),
+            Skills::to_str(&Skills::WindowManagement(0)),
+            Skills::to_str(&Skills::TextManipulation(0)),
+            Skills::to_str(&Skills::Clipboard(0)),
+            Skills::to_str(&Skills::Finesse(0)),
+            Skills::to_str(&Skills::Search(0)),
+            Skills::to_str(&Skills::Knowledge(0)),
+            Skills::to_str(&Skills::Saving(0)),
         ]
         .to_vec();
         skills_strs
     }
 
-    pub fn to_str(self) -> String {
+    pub fn to_str(&self) -> String {
         match self {
             Skills::VerticalNavigation(_) => "VerticalNavigation".to_string(),
             Skills::HorizontalNavigation(_) => "HorizontalNavigation".to_string(),
@@ -45,6 +45,22 @@ impl Skills {
             Skills::Search(_) => "Search".to_string(),
             Skills::Knowledge(_) => "Knowledge".to_string(),
             Skills::Saving(_) => "Saving".to_string(),
+        }
+    }
+
+    pub fn get_exp_from_skill(&self) -> i32 {
+        match self {
+            Skills::VerticalNavigation(exp) => *exp,
+            Skills::HorizontalNavigation(exp) => *exp,
+            Skills::CodeFlow(exp) => *exp,
+            Skills::CameraMovement(exp) => *exp,
+            Skills::WindowManagement(exp) => *exp,
+            Skills::TextManipulation(exp) => *exp,
+            Skills::Clipboard(exp) => *exp,
+            Skills::Finesse(exp) => *exp,
+            Skills::Search(exp) => *exp,
+            Skills::Knowledge(exp) => *exp,
+            Skills::Saving(exp) => *exp,
         }
     }
 }
