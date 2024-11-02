@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
-use crate::{db::create_tables, skills::Skills, token::Token};
+use crate::{db::create_tables, db::write_results_to_table, skills::Skills, token::Token};
 use logos::Logos;
 use nvim_oxi::{self as oxi, print, Dictionary, Function};
+use rusqlite::Connection;
 
 mod db;
 mod skills;
@@ -34,13 +35,18 @@ fn process_batch(input: String) -> bool {
             println!("Failed to parse: {}", lexer.slice());
         }
     }
-
     println!("Finished parsing, final skills: {:?}", skills);
 
-    let _ = create_tables();
+    let conn = match Connection::open("vimscape.db") {
+        Ok(conn) => conn,
+        Err(_) => {
+            println!("Failed to connect to database");
+            return false;
+        }
+    };
 
-    // iter over hash map, write each to table
-
+    create_tables(&conn);
+    write_results_to_table(&conn, skills);
     true
 }
 
