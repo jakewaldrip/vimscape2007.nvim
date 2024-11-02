@@ -17,7 +17,9 @@ fn vimscape2007() -> nvim_oxi::Result<Dictionary> {
 }
 
 fn process_batch(input: String) -> bool {
-    print!("{}", input);
+    print!("Input: {}", input);
+    println!("Input: {}", input);
+    println!("Input Length: {}", input.len());
     let mut lexer = Token::lexer(&input);
     let mut skills: HashMap<String, i32> = HashMap::new();
 
