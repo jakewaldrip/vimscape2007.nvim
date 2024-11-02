@@ -21,9 +21,9 @@ fn process_batch(input: String) -> bool {
     let mut skills: HashMap<String, i32> = HashMap::new();
 
     while let Some(token) = lexer.next() {
-        println!("Got token {:?}", token);
+        println!("Parsed token: {:?}", token);
         if let Some(result) = parse_action_into_skill(token) {
-            println!("Parsed {},into {:?} skill", lexer.slice(), result);
+            println!("Parsed text: {} into skill {:?}", lexer.slice(), result);
             let skill_str = result.to_str();
             let new_exp = result.get_exp_from_skill();
             match skills.get(&*skill_str) {
@@ -141,6 +141,6 @@ fn process_batch_succeeds_base_case() {
 
 #[oxi::test]
 fn process_batch_prints_tokens_test() {
-    let result = process_batch("jk3ldw:wgg".to_string());
+    let result = process_batch("jk3l:w|enter|hd33ww".to_string());
     assert_eq!(result, true);
 }

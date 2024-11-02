@@ -101,8 +101,6 @@ pub enum Token {
 
     // d$, dw, etc, doubles up on every key, ie dww, d$$, etc
     // If a number is included, it doubles the digits of the number
-    // Why did i write this one? Leave for further investigation
-    // #[regex(r"(?:[1-9]{1}\d{0,})?d", pull_modifier_from_single_movement)]
     #[regex(
         r"d(?:[1-9]{1}\d{0,})?[dwWeEbB$^0][dwWeEbB$^0]",
         pull_modifier_from_arbitrary_location_hacky_version
@@ -522,6 +520,17 @@ fn delete_text() {
     assert_eq!(lexer.slice(), "3x");
     assert_eq!(lexer.next(), Some(Ok(Token::DeleteText(1))));
     assert_eq!(lexer.slice(), "x");
+    assert_eq!(lexer.next(), None);
+}
+
+#[test]
+fn delete_text_word() {
+    const TEST_INPUT: &str = "dwwd33ww";
+    let mut lexer = Token::lexer(TEST_INPUT);
+    assert_eq!(lexer.next(), Some(Ok(Token::DeleteText(1))));
+    assert_eq!(lexer.slice(), "dww");
+    assert_eq!(lexer.next(), Some(Ok(Token::DeleteText(3))));
+    assert_eq!(lexer.slice(), "d33ww");
     assert_eq!(lexer.next(), None);
 }
 
