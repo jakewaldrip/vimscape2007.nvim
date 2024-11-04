@@ -39,7 +39,7 @@ fn process_batch(input: String) -> bool {
     }
     println!("Finished parsing, final skills: {:?}", skills);
 
-    let conn = match Connection::open("vimscape.db") {
+    let conn = match Connection::open("test.db") {
         Ok(conn) => conn,
         Err(_) => {
             println!("Failed to connect to database");
@@ -149,6 +149,9 @@ fn process_batch_succeeds_base_case() {
 
 #[oxi::test]
 fn process_batch_prints_tokens_test() {
-    let result = process_batch("jk3l:w|enter|hd33ww".to_string());
+    let result = process_batch(
+        r#"jk3l:w|enter|hd33ww:<C-U>call<Space>matchit#Match_wrapper('',1,'n')|enter|m'zvzzz:h test<Esc>jj:help test|enter|<C-W>s<C-W>v3""3puU<C-R>3w.3w/testsearch|enter|/testsearch2<Esc>hjkl"#
+            .to_string(),
+    );
     assert_eq!(result, true);
 }
