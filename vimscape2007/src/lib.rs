@@ -2,18 +2,76 @@ use std::collections::HashMap;
 
 use crate::{db::create_tables, db::write_results_to_table, skills::Skills, token::Token};
 use logos::Logos;
-use nvim_oxi::{self as oxi, print, Dictionary, Function};
+use nvim_oxi::conversion::{Error as ConversionError, FromObject, ToObject};
+use nvim_oxi::serde::{Deserializer, Serializer};
+use nvim_oxi::{self as oxi, lua, print, Dictionary, Function, Object};
 use rusqlite::Connection;
+use serde::{Deserialize, Serialize};
 
 mod db;
 mod skills;
 mod token;
 
+#[derive(Serialize, Deserialize, Debug)]
+struct UserData {
+    skill_name: String,
+    total_exp: i32,
+    level: i32,
+}
+
+impl FromObject for UserData {
+    fn from_object(obj: Object) -> Result<Self, ConversionError> {
+        Self::deserialize(Deserializer::new(obj)).map_err(Into::into)
+    }
+}
+
+impl ToObject for UserData {
+    fn to_object(self) -> Result<Object, ConversionError> {
+        self.serialize(Serializer::new()).map_err(Into::into)
+    }
+}
+
+impl lua::Poppable for UserData {
+    unsafe fn pop(lstate: *mut lua::ffi::lua_State) -> Result<Self, lua::Error> {
+        let obj = Object::pop(lstate)?;
+        Self::from_object(obj).map_err(lua::Error::pop_error_from_err::<Self, _>)
+    }
+}
+
+impl lua::Pushable for UserData {
+    unsafe fn push(self, lstate: *mut lua::ffi::lua_State) -> Result<std::ffi::c_int, lua::Error> {
+        self.to_object()
+            .map_err(lua::Error::push_error_from_err::<Self, _>)?
+            .push(lstate)
+    }
+}
+
 #[nvim_oxi::plugin]
 fn vimscape2007() -> nvim_oxi::Result<Dictionary> {
     let process_batch_fn = Function::from_fn(process_batch);
-    let api = Dictionary::from_iter([("process_batch", process_batch_fn)]);
+    let get_user_data_fn = Function::from_fn(get_user_data);
+    let api = Dictionary::from_iter([
+        ("process_batch", Object::from(process_batch_fn)),
+        ("get_user_data", Object::from(get_user_data_fn)),
+    ]);
     Ok(api)
+}
+
+fn get_user_data(_: String) -> Vec<UserData> {
+    let user_data = vec![
+        UserData {
+            skill_name: "jimbo".to_owned(),
+            total_exp: 100,
+            level: 32,
+        },
+        UserData {
+            skill_name: "billy".to_owned(),
+            total_exp: 327,
+            level: 61,
+        },
+    ];
+
+    return user_data;
 }
 
 fn process_batch(input: String) -> bool {
@@ -154,4 +212,11 @@ fn process_batch_prints_tokens_test() {
             .to_string(),
     );
     assert_eq!(result, true);
+}
+
+#[oxi::test]
+fn get_user_data_base_case() {
+    let result = get_user_data("".to_string());
+    println!("result {:?}", result);
+    assert_eq!(1, 1);
 }
