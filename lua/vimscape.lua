@@ -129,6 +129,7 @@ M.show_data = function()
 	})
 
 	local user_data = vimscape.get_user_data("")
+	print(dump(user_data))
 	vim.api.nvim_open_win(Vimscape_stats_bufnr, true, stat_window_config)
 
 	vim.api.nvim_set_option_value("modifiable", true, {})
