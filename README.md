@@ -22,7 +22,7 @@ This plugin is currently in active development and is not ready to be consumed p
 
 * [X] Get test skill data displaying in a floating window
 * [ ] Pull full skill data from db into the plugin
-* [ ] Reorganize Lua side
+* [X] Reorganize Lua side
 * [X] Reorganize Rust side
 * [ ] Prettify formatting of skill data
 * [ ] Add configuration POC
