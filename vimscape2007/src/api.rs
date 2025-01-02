@@ -4,7 +4,7 @@ use logos::Logos;
 use rusqlite::Connection;
 
 use crate::{
-    db::{create_tables, write_results_to_table},
+    db::{create_tables, get_skill_data, write_results_to_table},
     parse_utils::parse_action_into_skill,
     skill_data::SkillData,
     token::Token,
@@ -47,18 +47,13 @@ pub fn process_batch(input: String) -> bool {
 }
 
 pub fn get_user_data(_: String) -> Vec<SkillData> {
-    let user_data = vec![
-        SkillData {
-            skill_name: "jimbo".to_owned(),
-            total_exp: 100,
-            level: 32,
-        },
-        SkillData {
-            skill_name: "billy".to_owned(),
-            total_exp: 327,
-            level: 61,
-        },
-    ];
+    let conn = match Connection::open("test.db") {
+        Ok(conn) => conn,
+        Err(_) => {
+            println!("Failed to connect to database");
+            return Vec::new();
+        }
+    };
 
-    return user_data;
+    get_skill_data(&conn).expect("Something is wrong with the db")
 }

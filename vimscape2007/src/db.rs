@@ -1,8 +1,21 @@
 use std::collections::HashMap;
 
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, Error};
 
-use crate::skills::Skills;
+use crate::{skill_data::SkillData, skills::Skills};
+
+pub fn get_skill_data(conn: &Connection) -> Result<Vec<SkillData>, Error> {
+    let mut statement = conn.prepare("SELECT name, exp FROM skills")?;
+    let skill_data_iter = statement.query_map([], |row| {
+        Ok(SkillData {
+            skill_name: row.get(0)?,
+            total_exp: row.get(1)?,
+            level: 15,
+        })
+    })?;
+
+    skill_data_iter.collect()
+}
 
 pub fn create_tables(conn: &Connection) -> () {
     create_skills_table(&conn);
