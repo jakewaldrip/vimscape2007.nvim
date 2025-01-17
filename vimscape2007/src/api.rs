@@ -11,16 +11,11 @@ use crate::{
 };
 
 pub fn process_batch(input: String) -> bool {
-    print!("Input: {}", input);
-    println!("Input: {}", input);
-    println!("Input Length: {}", input.len());
     let mut lexer = Token::lexer(&input);
     let mut skills: HashMap<String, i32> = HashMap::new();
 
     while let Some(token) = lexer.next() {
-        println!("Parsed token: {:?}", token);
         if let Some(result) = parse_action_into_skill(token) {
-            println!("Parsed text: {} into skill {:?}", lexer.slice(), result);
             let skill_str = result.to_str();
             let new_exp = result.get_exp_from_skill();
             match skills.get(&*skill_str) {
@@ -31,7 +26,6 @@ pub fn process_batch(input: String) -> bool {
             println!("Failed to parse: {}", lexer.slice());
         }
     }
-    println!("Finished parsing, final skills: {:?}", skills);
 
     let conn = match Connection::open("test.db") {
         Ok(conn) => conn,
@@ -46,7 +40,7 @@ pub fn process_batch(input: String) -> bool {
     true
 }
 
-pub fn get_user_data(_: String) -> Vec<SkillData> {
+pub fn get_user_data(_: String) -> Vec<String> {
     let conn = match Connection::open("test.db") {
         Ok(conn) => conn,
         Err(_) => {
@@ -55,5 +49,11 @@ pub fn get_user_data(_: String) -> Vec<SkillData> {
         }
     };
 
-    get_skill_data(&conn).expect("Something is wrong with the db")
+    let mut display_strings: Vec<String> = Vec::new();
+    let skill_data = get_skill_data(&conn).expect("Failed to connect to database");
+    for data in skill_data {
+        // TODO - find separator values from dotfiles and push here
+        display_strings.push(data.format_skill_data());
+    }
+    display_strings
 }

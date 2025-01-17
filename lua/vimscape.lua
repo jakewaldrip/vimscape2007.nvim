@@ -33,23 +33,22 @@ M.show_data = function()
 		end,
 	})
 
+	vim.keymap.set("n", "q", ":q<CR>", { silent = true, buffer = window_config.vimscape_stats_bufnr })
+	vim.keymap.set(
+		"n",
+		"d",
+		":lua print('Getting Details')<CR>",
+		{ silent = true, buffer = window_config.vimscape_stats_bufnr }
+	)
+
 	local user_data = vimscape.get_user_data("")
 	print(utils.dump(user_data))
 	vim.api.nvim_open_win(window_config.vimscape_stats_bufnr, true, window_config.stat_window_config)
 
 	vim.api.nvim_set_option_value("modifiable", true, {})
 	for k, v in pairs(user_data) do
-		print(k, v.skill_name, v.level, v.total_exp)
-
-		-- Figure out why this isn't triggering
-		-- Is it possibly conflicting with another keymap?
-		-- vim.api.nvim_buf_set_keymap(Vimscape_stats_bufnr, "n", "q", ":lua print('hello')", {})
-		-- Create one for viewing the details as well (another smaller window, do this later its just for vibe)
-		-- vim.api.nvim_buf_set_keymap(Vimscape_stats_bufnr, "n", "d", ":lua print('hello')", {})
-
 		local text = {}
-		local line = "Skill: " .. v.skill_name .. " | Level: " .. v.level .. " | Total Exp: " .. v.total_exp
-		text[1] = line
+		text[1] = v
 		vim.api.nvim_buf_set_lines(window_config.vimscape_stats_bufnr, k, k, false, text)
 	end
 	vim.api.nvim_set_option_value("modifiable", false, {})
