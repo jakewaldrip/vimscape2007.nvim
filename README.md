@@ -21,9 +21,10 @@ This plugin is currently in active development and is not ready to be consumed p
 ### TODO
 
 * [X] Get test skill data displaying in a floating window
-* [ ] Pull full skill data from db into the plugin
+* [X] Pull full skill data from db into the plugin
 * [X] Reorganize Lua side
 * [X] Reorganize Rust side
 * [ ] Prettify formatting of skill data
+  * [X] Move formatting to Rust side
 * [ ] Add configuration POC
 * [ ] Flesh out configuration
