@@ -36,7 +36,7 @@ fn process_batch_prints_tokens_test() {
 
 #[oxi::test]
 fn get_user_data_base_case() {
-    let result = get_user_data("".to_string());
+    let result = get_user_data(30);
     println!("result {:?}", result);
     assert_eq!(1, 1);
 }

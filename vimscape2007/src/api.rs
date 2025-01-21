@@ -6,7 +6,7 @@ use rusqlite::Connection;
 use crate::{
     db::{create_tables, get_skill_data, write_results_to_table},
     parse_utils::parse_action_into_skill,
-    skill_data::SkillData,
+    skill_data::format_skill_data,
     token::Token,
 };
 
@@ -40,7 +40,7 @@ pub fn process_batch(input: String) -> bool {
     true
 }
 
-pub fn get_user_data(_: String) -> Vec<String> {
+pub fn get_user_data(col_len: i32) -> Vec<String> {
     let conn = match Connection::open("test.db") {
         Ok(conn) => conn,
         Err(_) => {
@@ -49,11 +49,7 @@ pub fn get_user_data(_: String) -> Vec<String> {
         }
     };
 
-    let mut display_strings: Vec<String> = Vec::new();
     let skill_data = get_skill_data(&conn).expect("Failed to connect to database");
-    for data in skill_data {
-        // TODO - find separator values from dotfiles and push here
-        display_strings.push(data.format_skill_data());
-    }
+    let display_strings: Vec<String> = format_skill_data(&skill_data, col_len);
     display_strings
 }
