@@ -48,13 +48,13 @@ M.show_data = function()
 
 	vim.api.nvim_buf_set_lines(window_config.vimscape_stats_bufnr, 0, -1, false, {})
 
-	vim.api.nvim_set_option_value("modifiable", true, {})
+	-- vim.api.nvim_set_option_value("modifiable", true, {})
 	for k, v in pairs(user_data) do
 		local text = {}
 		text[1] = v
 		vim.api.nvim_buf_set_lines(window_config.vimscape_stats_bufnr, k, k, false, text)
 	end
-	vim.api.nvim_set_option_value("modifiable", false, {})
+	-- vim.api.nvim_set_option_value("modifiable", false, {})
 end
 
 vim.on_key(keys.record_keys, ns)
