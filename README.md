@@ -24,7 +24,7 @@ This plugin is currently in active development and is not ready to be consumed p
 * [X] Pull full skill data from db into the plugin
 * [X] Reorganize Lua side
 * [X] Reorganize Rust side
-* [ ] Prettify formatting of skill data
+* [-] Prettify formatting of skill data
   * [X] Move formatting to Rust side
-* [ ] Add configuration POC
+* [X] Add configuration POC
 * [ ] Flesh out configuration

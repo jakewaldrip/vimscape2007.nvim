@@ -1,4 +1,4 @@
-local vimscape = require("vimscape2007")
+local vimscape = require("vimscape_backend")
 local globals = require("globals")
 
 local M = {}
@@ -53,7 +53,7 @@ M.record_keys = function(key)
 
 	if #globals.typed_letters >= 50 then
 		local string_value = table.concat(globals.typed_letters)
-		vimscape.process_batch(string_value)
+		vimscape.process_batch(string_value, globals.db_path)
 		globals.typed_letters = {}
 	end
 

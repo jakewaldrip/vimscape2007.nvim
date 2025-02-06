@@ -1,5 +1,5 @@
 [package]
-name = "vimscape2007"
+name = "vimscape_backend"
 version = "0.1.0"
 edition = "2021"
 

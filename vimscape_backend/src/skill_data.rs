@@ -42,6 +42,7 @@ pub fn format_skill_data(skill_data: &Vec<SkillData>, col_len: i32) -> Vec<Strin
     // TODO: split this into columns, put separators between rows
     // put separators between columns
     for skill in skill_data {
+        lines.push("│".into());
         lines.push(skill.skill_name.clone());
         lines.push(skill.level.to_string());
         lines.push(skill.total_exp.to_string());

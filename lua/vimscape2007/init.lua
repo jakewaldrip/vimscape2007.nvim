@@ -1,15 +1,19 @@
-local vimscape = require("vimscape2007")
 local keys = require("keys")
 local utils = require("utils")
 local globals = require("globals")
 local window_config = require("window_config")
+local vimscape = require("vimscape_backend")
 
 local M = {}
-
 local ns = vim.api.nvim_create_namespace("vimscape_keys")
 
 M.setup = function(opts)
-	print("Options: ", opts)
+	vim.notify("Ran setup for Vimscape", vim.log.levels.INFO)
+
+	-- TODO: Do this via deep_copy table if possible, storing the config in
+	-- a separate config module instead of in globals
+	globals.db_path = opts.db_path
+	vimscape.setup_tables(globals.db_path)
 end
 
 M.toggle = function()
@@ -42,7 +46,7 @@ M.show_data = function()
 	)
 
 	local bufr_width = window_config.stat_window_config.width
-	local user_data = vimscape.get_user_data(bufr_width)
+	local user_data = vimscape.get_user_data(bufr_width, globals.db_path)
 	print(utils.dump(user_data))
 	vim.api.nvim_open_win(window_config.vimscape_stats_bufnr, true, window_config.stat_window_config)
 

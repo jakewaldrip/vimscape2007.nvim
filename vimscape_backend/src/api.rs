@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 use logos::Logos;
 use rusqlite::Connection;
@@ -10,7 +10,7 @@ use crate::{
     token::Token,
 };
 
-pub fn process_batch(input: String) -> bool {
+pub fn process_batch((input, db_path): (String, String)) -> bool {
     let mut lexer = Token::lexer(&input);
     let mut skills: HashMap<String, i32> = HashMap::new();
 
@@ -27,7 +27,7 @@ pub fn process_batch(input: String) -> bool {
         }
     }
 
-    let conn = match Connection::open("test.db") {
+    let conn = match Connection::open(Path::new(&db_path).join("test.db")) {
         Ok(conn) => conn,
         Err(_) => {
             println!("Failed to connect to database");
@@ -35,13 +35,12 @@ pub fn process_batch(input: String) -> bool {
         }
     };
 
-    create_tables(&conn);
     write_results_to_table(&conn, skills);
     true
 }
 
-pub fn get_user_data(col_len: i32) -> Vec<String> {
-    let conn = match Connection::open("test.db") {
+pub fn get_user_data((col_len, db_path): (i32, String)) -> Vec<String> {
+    let conn = match Connection::open(Path::new(&db_path).join("test.db")) {
         Ok(conn) => conn,
         Err(_) => {
             println!("Failed to connect to database");
@@ -52,4 +51,16 @@ pub fn get_user_data(col_len: i32) -> Vec<String> {
     let skill_data = get_skill_data(&conn).expect("Failed to connect to database");
     let display_strings: Vec<String> = format_skill_data(&skill_data, col_len);
     display_strings
+}
+
+pub fn setup_tables(db_path: String) {
+    let conn = match Connection::open(Path::new(&db_path).join("test.db")) {
+        Ok(conn) => conn,
+        Err(_) => {
+            println!("Failed to connect to database");
+            return ();
+        }
+    };
+
+    create_tables(&conn);
 }
