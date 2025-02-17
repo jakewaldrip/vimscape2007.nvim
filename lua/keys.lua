@@ -1,8 +1,11 @@
 local vimscape = require("vimscape_backend")
 local globals = require("globals")
+local config = require("config")
 
+---@class Keys
 local M = {}
 
+---@return string | nil
 M.sanitize_key = function(key)
 	local b = key:byte()
 	if b <= 126 and b >= 33 then
@@ -53,7 +56,7 @@ M.record_keys = function(key)
 
 	if #globals.typed_letters >= 50 then
 		local string_value = table.concat(globals.typed_letters)
-		vimscape.process_batch(string_value, globals.db_path)
+		vimscape.process_batch(string_value, config.db_path)
 		globals.typed_letters = {}
 	end
 

@@ -1,5 +1,8 @@
 local utils = require("utils")
 
+---@class WindowConfig
+---@field vimscape_stats_bufnr integer Buffer to show the stats window inside
+---@field stat_window_config table Config for the stats window
 local M = {}
 
 local ui = vim.api.nvim_list_uis()[1]

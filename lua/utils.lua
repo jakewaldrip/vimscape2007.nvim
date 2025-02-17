@@ -1,5 +1,7 @@
+---@class Utils
 local M = {}
 
+---@return number
 M.round = function(float)
 	return math.floor(float + 0.5)
 end

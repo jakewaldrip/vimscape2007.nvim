@@ -28,3 +28,4 @@ This plugin is currently in active development and is not ready to be consumed p
   * [X] Move formatting to Rust side
 * [X] Add configuration POC
 * [ ] Flesh out configuration
+* [X] Add type hints
