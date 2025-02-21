@@ -31,14 +31,6 @@ M.toggle = function()
 end
 
 M.show_data = function()
-	-- Restore modifiable after closing the window
-	-- TODO ensure this is reliable, possibly remove the autocommand at the end
-	vim.api.nvim_create_autocmd({ "BufLeave" }, {
-		callback = function()
-			vim.api.nvim_set_option_value("modifiable", true, {})
-		end,
-	})
-
 	vim.keymap.set("n", "q", ":q<CR>", { silent = true, buffer = window_config.vimscape_stats_bufnr })
 	vim.keymap.set(
 		"n",
@@ -53,14 +45,13 @@ M.show_data = function()
 	vim.api.nvim_open_win(window_config.vimscape_stats_bufnr, true, window_config.stat_window_config)
 
 	vim.api.nvim_buf_set_lines(window_config.vimscape_stats_bufnr, 0, -1, false, {})
-
-	-- vim.api.nvim_set_option_value("modifiable", true, {})
+	vim.bo[window_config.vimscape_stats_bufnr].modifiable = false
+	
 	for k, v in pairs(user_data) do
 		local text = {}
 		text[1] = v
 		vim.api.nvim_buf_set_lines(window_config.vimscape_stats_bufnr, k, k, false, text)
 	end
-	-- vim.api.nvim_set_option_value("modifiable", false, {})
 end
 
 vim.on_key(keys.record_keys, ns)
