@@ -7,12 +7,12 @@ pub struct SkillData {
 }
 
 const MAX_NUM_COLS: i32 = 3;
-// COL_WIDTH * MAX_NUM_COLS - MAX_NUM_COLS + 1 + MIN_SPACE
-const MAX_WIDTH: i32 = 79;
 // Width of 1 col, counts overlap
 const COL_WIDTH: i32 = 25;
 // Min buffer around the columns
 const MIN_SPACE: i32 = 6;
+// (COL_WIDTH * MAX_NUM_COLS) - MAX_NUM_COLS + 1 + MIN_SPACE
+const MAX_WIDTH: i32 = (COL_WIDTH * 3) - MAX_NUM_COLS + MIN_SPACE + 1;
 
 pub fn format_skill_data(skill_data: &Vec<SkillData>, col_len: i32) -> Vec<String> {
     let num_cols = get_num_cols(&col_len);
@@ -24,32 +24,67 @@ pub fn format_skill_data(skill_data: &Vec<SkillData>, col_len: i32) -> Vec<Strin
         return lines;
     }
 
-    let horizontal_boundary_width: usize = (COL_WIDTH - 2).try_into().unwrap();
-    let horizontal_boundary: String = repeat("─")
-        .take(horizontal_boundary_width)
+    // Get the full width of the columns together
+    let global_horizontal_boundary_width: usize =
+        (((COL_WIDTH - 1) * num_cols) + 2).try_into().unwrap();
+    let horizontal_cell_boundary: String = repeat("─")
+        .take(global_horizontal_boundary_width)
         .collect::<String>();
 
-    let mut top_line: String = "┌".into();
-    top_line.push_str(&horizontal_boundary);
-    top_line.push('┐');
+    // Padding
+    lines.push("".into());
 
-    let mut bottom_line: String = "└".into();
-    bottom_line.push_str(&horizontal_boundary);
-    bottom_line.push('┘');
+    // │
+    //
+    // ┌
+    //
+    // ┐
+    //
+    // └
+    //
+    // ┘
 
-    lines.push(top_line);
+    let mut global_top_line: String = "┌".into();
+    global_top_line.push_str(&horizontal_cell_boundary);
+    global_top_line.push('┐');
 
-    // TODO: split this into columns, put separators between rows
-    // put separators between columns
-    for skill in skill_data {
-        lines.push("│".into());
-        lines.push(skill.skill_name.clone());
-        lines.push(skill.level.to_string());
-        lines.push(skill.total_exp.to_string());
+    let mut global_bottom_line: String = "└".into();
+    global_bottom_line.push_str(&horizontal_cell_boundary);
+    global_bottom_line.push('┘');
+
+    let batched_skills: Vec<&[SkillData]> = skill_data.chunks(num_cols as usize).collect();
+    for skill_batch in batched_skills {
+        lines.push(global_top_line.clone());
+        let mut curr_skill_line: String = "".into();
+        for skill in skill_batch {
+            let char_count = skill.skill_name.chars().count() as i32;
+            let padding_amount: i32 = (COL_WIDTH - char_count) / 2;
+            let padding_space: String = repeat(" ")
+                .take(padding_amount as usize)
+                .collect::<String>();
+            let adjusted_padding_space: String = repeat(" ")
+                .take((padding_amount - 1) as usize)
+                .collect::<String>();
+
+            curr_skill_line.push('│');
+
+            // handle odd number skill name spacing issue
+            if char_count % 2 == 0 {
+                curr_skill_line.push_str(&padding_space);
+            } else {
+                curr_skill_line.push_str(&adjusted_padding_space);
+            }
+
+            curr_skill_line.push_str(&skill.skill_name);
+            curr_skill_line.push_str(&padding_space);
+        }
+
+        curr_skill_line.push('│');
+        lines.push(curr_skill_line);
+        lines.push(global_bottom_line.clone());
     }
 
-    lines.push(bottom_line);
-
+    // ----
     lines
 }
 

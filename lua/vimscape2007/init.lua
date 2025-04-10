@@ -45,8 +45,8 @@ M.show_data = function()
 	vim.api.nvim_open_win(window_config.vimscape_stats_bufnr, true, window_config.stat_window_config)
 
 	vim.api.nvim_buf_set_lines(window_config.vimscape_stats_bufnr, 0, -1, false, {})
-	vim.bo[window_config.vimscape_stats_bufnr].modifiable = false
-	
+	vim.bo[window_config.vimscape_stats_bufnr].modifiable = true
+
 	for k, v in pairs(user_data) do
 		local text = {}
 		text[1] = v
