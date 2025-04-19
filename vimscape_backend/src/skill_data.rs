@@ -24,13 +24,6 @@ pub fn format_skill_data(skill_data: &Vec<SkillData>, col_len: i32) -> Vec<Strin
         return lines;
     }
 
-    // Get the full width of the columns together
-    let global_horizontal_boundary_width: usize =
-        (((COL_WIDTH - 1) * num_cols) + 2).try_into().unwrap();
-    let horizontal_cell_boundary: String = repeat("─")
-        .take(global_horizontal_boundary_width)
-        .collect::<String>();
-
     // Padding
     lines.push("".into());
 
@@ -44,48 +37,89 @@ pub fn format_skill_data(skill_data: &Vec<SkillData>, col_len: i32) -> Vec<Strin
     //
     // ┘
 
-    let mut global_top_line: String = "┌".into();
-    global_top_line.push_str(&horizontal_cell_boundary);
-    global_top_line.push('┐');
+    let mut batched_skills: Vec<&[SkillData]> = skill_data.chunks(num_cols as usize).collect();
 
-    let mut global_bottom_line: String = "└".into();
-    global_bottom_line.push_str(&horizontal_cell_boundary);
-    global_bottom_line.push('┘');
+    // Temp testing for single skill columns
+    let skill_data_test = SkillData {
+        skill_name: "Bobby".into(),
+        total_exp: 32,
+        level: 15,
+    };
+    let test = vec![skill_data_test];
+    let test2: &[SkillData] = &test;
+    batched_skills.push(test2);
 
-    let batched_skills: Vec<&[SkillData]> = skill_data.chunks(num_cols as usize).collect();
     for skill_batch in batched_skills {
-        lines.push(global_top_line.clone());
+        let top_line = create_top_line(&(skill_batch.len() as i32));
+        lines.push(top_line.clone());
         let mut curr_skill_line: String = "".into();
         for skill in skill_batch {
-            let char_count = skill.skill_name.chars().count() as i32;
-            let padding_amount: i32 = (COL_WIDTH - char_count) / 2;
-            let padding_space: String = repeat(" ")
-                .take(padding_amount as usize)
-                .collect::<String>();
-            let adjusted_padding_space: String = repeat(" ")
-                .take((padding_amount - 1) as usize)
-                .collect::<String>();
-
             curr_skill_line.push('│');
 
-            // handle odd number skill name spacing issue
-            if char_count % 2 == 0 {
-                curr_skill_line.push_str(&padding_space);
+            let char_count = skill.skill_name.chars().count() as i32;
+            let padding_space = get_padding_space(&char_count);
+            let adjusted_padding_space = get_adjusted_padding_space(&char_count);
+            let left_padding = if char_count % 2 == 0 {
+                &padding_space
             } else {
-                curr_skill_line.push_str(&adjusted_padding_space);
-            }
+                &adjusted_padding_space
+            };
 
+            curr_skill_line.push_str(&left_padding);
             curr_skill_line.push_str(&skill.skill_name);
             curr_skill_line.push_str(&padding_space);
         }
 
         curr_skill_line.push('│');
         lines.push(curr_skill_line);
-        lines.push(global_bottom_line.clone());
+
+        let bottom_line = create_bottom_line(&(skill_batch.len() as i32));
+        lines.push(bottom_line.clone());
     }
 
     // ----
     lines
+}
+
+fn create_top_line(num_cols: &i32) -> String {
+    let horizontal_boundary_width: usize = ((COL_WIDTH * num_cols) - 1).try_into().unwrap();
+    let horizontal_line: String = repeat("─")
+        .take(horizontal_boundary_width)
+        .collect::<String>();
+
+    let mut top_line: String = "┌".into();
+    top_line.push_str(&horizontal_line);
+    top_line.push('┐');
+    return top_line.clone();
+}
+
+fn create_bottom_line(num_cols: &i32) -> String {
+    let horizontal_boundary_width: usize = ((COL_WIDTH * num_cols) - 1).try_into().unwrap();
+    let horizontal_line: String = repeat("─")
+        .take(horizontal_boundary_width)
+        .collect::<String>();
+
+    let mut bottom_line: String = "└".into();
+    bottom_line.push_str(&horizontal_line);
+    bottom_line.push('┘');
+
+    return bottom_line.clone();
+}
+
+fn get_padding_space(char_count: &i32) -> String {
+    let padding_amount: i32 = (COL_WIDTH - char_count) / 2;
+    let padding_space: String = repeat(" ")
+        .take(padding_amount as usize)
+        .collect::<String>();
+    padding_space
+}
+
+fn get_adjusted_padding_space(char_count: &i32) -> String {
+    let padding_amount: i32 = (COL_WIDTH - char_count) / 2;
+    let adjusted_padding_space: String = repeat(" ")
+        .take((padding_amount - 1) as usize)
+        .collect::<String>();
+    adjusted_padding_space
 }
 
 fn get_num_cols(col_len: &i32) -> i32 {
