@@ -17,3 +17,5 @@ Cargo.lock
 
 # Pre-built binary from Rust side of the plugin
 *.so
+
+lua/*.so
