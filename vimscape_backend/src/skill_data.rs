@@ -43,7 +43,7 @@ pub fn format_skill_data(skill_data: &Vec<SkillData>, col_len: i32) -> Vec<Strin
     let skill_data_test = SkillData {
         skill_name: "Bobby".into(),
         total_exp: 32,
-        level: 15,
+        level: 9,
     };
     let test = vec![skill_data_test];
     let test2: &[SkillData] = &test;
@@ -53,25 +53,56 @@ pub fn format_skill_data(skill_data: &Vec<SkillData>, col_len: i32) -> Vec<Strin
         let top_line = create_top_line(&(skill_batch.len() as i32));
         lines.push(top_line.clone());
         let mut curr_skill_line: String = "".into();
+        let mut curr_level_line: String = "".into();
+
         for skill in skill_batch {
             curr_skill_line.push('│');
+            curr_level_line.push('│');
 
-            let char_count = skill.skill_name.chars().count() as i32;
-            let padding_space = get_padding_space(&char_count);
-            let adjusted_padding_space = get_adjusted_padding_space(&char_count);
-            let left_padding = if char_count % 2 == 0 {
-                &padding_space
+            let skill_char_count = skill.skill_name.chars().count() as i32;
+            let level_char_count = skill.level.to_string().chars().count() as i32;
+
+            let skill_padding = get_padding(&skill_char_count);
+            let skill_adjusted_padding = get_adjusted_padding(&skill_char_count);
+            let level_padding = get_padding(&level_char_count);
+
+            let skill_left_padding = if skill_char_count % 2 == 0 {
+                &skill_padding
             } else {
-                &adjusted_padding_space
+                &skill_adjusted_padding
             };
 
-            curr_skill_line.push_str(&left_padding);
+            let level_str: String = if skill.level < 10 {
+                format!("0{}", skill.level.to_string())
+            } else {
+                skill.level.to_string()
+            };
+
+            let level_left_padding: String = if skill.level < 10 {
+                get_adjusted_padding(&level_char_count)
+            } else {
+                level_padding.clone()
+            };
+            let level_right_padding: String = if skill.level < 10 {
+                get_adjusted_padding(&level_char_count)
+            } else {
+                level_padding.clone()
+            };
+
+            curr_skill_line.push_str(&skill_left_padding);
             curr_skill_line.push_str(&skill.skill_name);
-            curr_skill_line.push_str(&padding_space);
+            curr_skill_line.push_str(&skill_padding);
+
+            curr_level_line.push_str(&level_left_padding);
+            curr_level_line.push_str(&level_str);
+            curr_level_line.push_str(&level_right_padding);
         }
 
         curr_skill_line.push('│');
         lines.push(curr_skill_line);
+
+        curr_level_line.push('│');
+        lines.push(curr_level_line);
 
         let bottom_line = create_bottom_line(&(skill_batch.len() as i32));
         lines.push(bottom_line.clone());
@@ -106,7 +137,7 @@ fn create_bottom_line(num_cols: &i32) -> String {
     return bottom_line.clone();
 }
 
-fn get_padding_space(char_count: &i32) -> String {
+fn get_padding(char_count: &i32) -> String {
     let padding_amount: i32 = (COL_WIDTH - char_count) / 2;
     let padding_space: String = repeat(" ")
         .take(padding_amount as usize)
@@ -114,7 +145,7 @@ fn get_padding_space(char_count: &i32) -> String {
     padding_space
 }
 
-fn get_adjusted_padding_space(char_count: &i32) -> String {
+fn get_adjusted_padding(char_count: &i32) -> String {
     let padding_amount: i32 = (COL_WIDTH - char_count) / 2;
     let adjusted_padding_space: String = repeat(" ")
         .take((padding_amount - 1) as usize)
