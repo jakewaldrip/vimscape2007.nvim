@@ -1,5 +1,8 @@
 use std::iter::repeat;
 
+// Border chars
+// │ ┌ ┐ └ ┘
+
 pub struct SkillData {
     pub skill_name: String,
     pub total_exp: i32,
@@ -12,7 +15,7 @@ const COL_WIDTH: i32 = 25;
 // Min buffer around the columns
 const MIN_SPACE: i32 = 6;
 // (COL_WIDTH * MAX_NUM_COLS) - MAX_NUM_COLS + 1 + MIN_SPACE
-const MAX_WIDTH: i32 = (COL_WIDTH * 3) - MAX_NUM_COLS + MIN_SPACE + 1;
+const MAX_WIDTH: i32 = (COL_WIDTH * MAX_NUM_COLS) - MAX_NUM_COLS + MIN_SPACE + 1;
 
 pub fn format_skill_data(skill_data: &Vec<SkillData>, col_len: i32) -> Vec<String> {
     let num_cols = get_num_cols(&col_len);
@@ -25,17 +28,8 @@ pub fn format_skill_data(skill_data: &Vec<SkillData>, col_len: i32) -> Vec<Strin
     }
 
     // Padding
-    lines.push("".into());
-
-    // │
-    //
-    // ┌
-    //
-    // ┐
-    //
-    // └
-    //
-    // ┘
+    let global_padding = get_global_left_padding(&col_len, &num_cols);
+    // lines.push("".into());
 
     let mut batched_skills: Vec<&[SkillData]> = skill_data.chunks(num_cols as usize).collect();
 
@@ -50,10 +44,11 @@ pub fn format_skill_data(skill_data: &Vec<SkillData>, col_len: i32) -> Vec<Strin
     batched_skills.push(test2);
 
     for skill_batch in batched_skills {
-        let top_line = create_top_line(&(skill_batch.len() as i32));
+        let top_line = create_top_line(&(skill_batch.len() as i32), global_padding.clone());
         lines.push(top_line.clone());
-        let mut curr_skill_line: String = "".into();
-        let mut curr_level_line: String = "".into();
+
+        let mut curr_skill_line: String = global_padding.clone();
+        let mut curr_level_line: String = global_padding.clone();
 
         for skill in skill_batch {
             curr_skill_line.push('│');
@@ -104,7 +99,7 @@ pub fn format_skill_data(skill_data: &Vec<SkillData>, col_len: i32) -> Vec<Strin
         curr_level_line.push('│');
         lines.push(curr_level_line);
 
-        let bottom_line = create_bottom_line(&(skill_batch.len() as i32));
+        let bottom_line = create_bottom_line(&(skill_batch.len() as i32), global_padding.clone());
         lines.push(bottom_line.clone());
     }
 
@@ -112,25 +107,27 @@ pub fn format_skill_data(skill_data: &Vec<SkillData>, col_len: i32) -> Vec<Strin
     lines
 }
 
-fn create_top_line(num_cols: &i32) -> String {
+fn create_top_line(num_cols: &i32, global_padding: String) -> String {
     let horizontal_boundary_width: usize = ((COL_WIDTH * num_cols) - 1).try_into().unwrap();
     let horizontal_line: String = repeat("─")
         .take(horizontal_boundary_width)
         .collect::<String>();
 
-    let mut top_line: String = "┌".into();
+    let mut top_line: String = global_padding;
+    top_line.push('┌');
     top_line.push_str(&horizontal_line);
     top_line.push('┐');
     return top_line.clone();
 }
 
-fn create_bottom_line(num_cols: &i32) -> String {
+fn create_bottom_line(num_cols: &i32, global_padding: String) -> String {
     let horizontal_boundary_width: usize = ((COL_WIDTH * num_cols) - 1).try_into().unwrap();
     let horizontal_line: String = repeat("─")
         .take(horizontal_boundary_width)
         .collect::<String>();
 
-    let mut bottom_line: String = "└".into();
+    let mut bottom_line: String = global_padding;
+    bottom_line.push('└');
     bottom_line.push_str(&horizontal_line);
     bottom_line.push('┘');
 
@@ -153,13 +150,21 @@ fn get_adjusted_padding(char_count: &i32) -> String {
     adjusted_padding_space
 }
 
+fn get_global_left_padding(col_len: &i32, num_cols: &i32) -> String {
+    let full_box_width: i32 = (*num_cols * COL_WIDTH) - MAX_NUM_COLS + 1;
+    let padding_amount: i32 = (*col_len - full_box_width) / 2;
+    let padding_space: String = repeat(" ")
+        .take(padding_amount as usize)
+        .collect::<String>();
+    padding_space
+}
+
 fn get_num_cols(col_len: &i32) -> i32 {
-    // Cap num_cols at 3 wide
     if *col_len > MAX_WIDTH {
         return MAX_NUM_COLS;
     }
 
-    let num_possible_cols = COL_WIDTH / (col_len - MIN_SPACE);
+    let num_possible_cols = (*col_len - MIN_SPACE) / COL_WIDTH;
     if num_possible_cols > MAX_NUM_COLS {
         return MAX_NUM_COLS;
     }
