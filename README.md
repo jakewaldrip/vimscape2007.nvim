@@ -18,14 +18,16 @@ This plugin is currently in active development and is not ready to be consumed p
 
 //TODO
 
-### TODO
+### Launch Todo
 
-* [X] Get test skill data displaying in a floating window
-* [X] Pull full skill data from db into the plugin
-* [X] Reorganize Lua side
-* [X] Reorganize Rust side
-* [-] Prettify formatting of skill data
+* Prettify formatting of skill data
   * [X] Move formatting to Rust side
-* [X] Add configuration POC
-* [ ] Flesh out configuration
-* [X] Add type hints
+  * [ ] Add border top and bottom chars between columns
+* [ ] Add details query to display in popup buffer
+* Flesh out configuration
+  * [ ] Remove the need for dbpath config
+  * [ ] Add option to disable level notifications
+* Add level up system
+  * [ ] Calculate xp curve for levels (0-99)
+  * [ ] Add check for passing level thresholds
+     * [ ] Notify in bulk on processing what levels occurred
