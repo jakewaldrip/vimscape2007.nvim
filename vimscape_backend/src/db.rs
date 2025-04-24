@@ -5,12 +5,12 @@ use rusqlite::{params, Connection, Error};
 use crate::{skill_data::SkillData, skills::Skills};
 
 pub fn get_skill_data(conn: &Connection) -> Result<Vec<SkillData>, Error> {
-    let mut statement = conn.prepare("SELECT name, exp FROM skills")?;
+    let mut statement = conn.prepare("SELECT name, exp, level FROM skills")?;
     let skill_data_iter = statement.query_map([], |row| {
         Ok(SkillData {
             skill_name: row.get(0)?,
             total_exp: row.get(1)?,
-            level: 15,
+            level: row.get(2)?,
         })
     })?;
 
@@ -32,11 +32,13 @@ pub fn write_results_to_table(conn: &Connection, skills: HashMap<String, i32>) -
 }
 
 fn create_skills_table(conn: &Connection) -> () {
+    println!("We're getting here");
     let _ = conn.execute(
         "create table if not exists skills (
           id integer primary key,
           name text not null unique,
-          exp integer not null default 0
+          exp integer not null default 0,
+          level integer not null default 0
          )",
         (),
     );
@@ -49,4 +51,19 @@ fn populate_skills_enum_table(conn: &Connection) -> () {
             params![i, skill],
         );
     }
+}
+
+pub fn get_skill_details_from_db(
+    conn: &Connection,
+    skill_name: &str,
+) -> Result<Vec<SkillData>, Error> {
+    let mut statement = conn.prepare("SELECT name, exp, level FROM skills where name = ?1")?;
+    let skill_data_iter = statement.query_map(params![skill_name], |row| {
+        Ok(SkillData {
+            skill_name: row.get(0)?,
+            total_exp: row.get(1)?,
+            level: row.get(2)?,
+        })
+    })?;
+    skill_data_iter.collect()
 }

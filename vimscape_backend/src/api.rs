@@ -4,9 +4,9 @@ use logos::Logos;
 use rusqlite::Connection;
 
 use crate::{
-    db::{create_tables, get_skill_data, write_results_to_table},
+    db::{create_tables, get_skill_data, get_skill_details_from_db, write_results_to_table},
     parse_utils::parse_action_into_skill,
-    skill_data::format_skill_data,
+    skill_data::{format_skill_data, format_skill_details},
     token::Token,
 };
 
@@ -27,7 +27,7 @@ pub fn process_batch((input, db_path): (String, String)) -> bool {
         }
     }
 
-    let conn = match Connection::open(Path::new(&db_path).join("test.db")) {
+    let conn = match Connection::open(Path::new(&db_path).join("teste.db")) {
         Ok(conn) => conn,
         Err(_) => {
             println!("Failed to connect to database");
@@ -40,7 +40,7 @@ pub fn process_batch((input, db_path): (String, String)) -> bool {
 }
 
 pub fn get_user_data((col_len, db_path): (i32, String)) -> Vec<String> {
-    let conn = match Connection::open(Path::new(&db_path).join("test.db")) {
+    let conn = match Connection::open(Path::new(&db_path).join("teste.db")) {
         Ok(conn) => conn,
         Err(_) => {
             println!("Failed to connect to database");
@@ -54,7 +54,7 @@ pub fn get_user_data((col_len, db_path): (i32, String)) -> Vec<String> {
 }
 
 pub fn setup_tables(db_path: String) {
-    let conn = match Connection::open(Path::new(&db_path).join("test.db")) {
+    let conn = match Connection::open(Path::new(&db_path).join("teste.db")) {
         Ok(conn) => conn,
         Err(_) => {
             println!("Failed to connect to database");
@@ -63,4 +63,22 @@ pub fn setup_tables(db_path: String) {
     };
 
     create_tables(&conn);
+}
+
+pub fn get_skill_details((c_word, db_path): (String, String)) -> Vec<String> {
+    let conn = match Connection::open(Path::new(&db_path).join("teste.db")) {
+        Ok(conn) => conn,
+        Err(_) => {
+            println!("Failed to connect to database");
+            return Vec::new();
+        }
+    };
+
+    let skill_data_vec =
+        get_skill_details_from_db(&conn, &c_word).expect("Failed to connect to database");
+    if let Some(skill_data) = skill_data_vec.get(0) {
+        format_skill_details(&skill_data)
+    } else {
+        Vec::new()
+    }
 }

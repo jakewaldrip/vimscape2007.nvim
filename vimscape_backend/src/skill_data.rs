@@ -29,19 +29,8 @@ pub fn format_skill_data(skill_data: &Vec<SkillData>, col_len: i32) -> Vec<Strin
 
     // Padding
     let global_padding = get_global_left_padding(&col_len, &num_cols);
-    // lines.push("".into());
 
-    let mut batched_skills: Vec<&[SkillData]> = skill_data.chunks(num_cols as usize).collect();
-
-    // Temp testing for single skill columns
-    let skill_data_test = SkillData {
-        skill_name: "Bobby".into(),
-        total_exp: 32,
-        level: 9,
-    };
-    let test = vec![skill_data_test];
-    let test2: &[SkillData] = &test;
-    batched_skills.push(test2);
+    let batched_skills: Vec<&[SkillData]> = skill_data.chunks(num_cols as usize).collect();
 
     for skill_batch in batched_skills {
         let top_line = create_top_line(&(skill_batch.len() as i32), global_padding.clone());
@@ -170,4 +159,17 @@ fn get_num_cols(col_len: &i32) -> i32 {
     }
 
     return num_possible_cols;
+}
+
+pub fn format_skill_details(skill_data: &SkillData) -> Vec<String> {
+    let SkillData {
+        total_exp,
+        level: _,
+        skill_name,
+    } = skill_data;
+
+    let mut lines: Vec<String> = Vec::new();
+    lines.push(skill_name.clone());
+    lines.push(total_exp.to_string().clone());
+    lines
 }
