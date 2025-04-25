@@ -35,6 +35,7 @@ pub fn process_batch((input, db_path): (String, String)) -> bool {
         }
     };
 
+    nvim_oxi::print!("Results: {:?}", skills);
     write_results_to_table(&conn, skills);
     true
 }

@@ -162,14 +162,15 @@ fn get_num_cols(col_len: &i32) -> i32 {
 }
 
 pub fn format_skill_details(skill_data: &SkillData) -> Vec<String> {
-    let SkillData {
-        total_exp,
-        level: _,
-        skill_name,
-    } = skill_data;
-
     let mut lines: Vec<String> = Vec::new();
-    lines.push(skill_name.clone());
-    lines.push(total_exp.to_string().clone());
+
+    let mut experience_line: String = "Experience - ".into();
+    experience_line.push_str(&skill_data.total_exp.to_string());
+    lines.push(experience_line);
+
+    let mut level_line: String = "Level - ".into();
+    level_line.push_str(&skill_data.level.to_string());
+    lines.push(level_line);
+
     lines
 }

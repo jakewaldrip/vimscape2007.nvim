@@ -1,4 +1,7 @@
 ---@class Utils
+---@field round function round to the nearest whole number
+---@field dump function print table recursively
+---@field print_to_buffer function print the content to the buffer, accepts table of lines
 local M = {}
 
 ---@return number
@@ -18,6 +21,14 @@ M.dump = function(o)
 		return s .. "} "
 	else
 		return tostring(o)
+	end
+end
+
+M.print_to_buffer = function(content, bufnr)
+	for k, v in pairs(content) do
+		local text = {}
+		text[1] = v
+		vim.api.nvim_buf_set_lines(bufnr, k, k, false, text)
 	end
 end
 

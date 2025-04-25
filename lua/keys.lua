@@ -54,9 +54,10 @@ M.record_keys = function(key)
 		return
 	end
 
-	if #globals.typed_letters >= 50 then
+	if #globals.typed_letters >= config.batch_size then
 		local string_value = table.concat(globals.typed_letters)
 		vimscape.process_batch(string_value, config.db_path)
+		vim.notify("Processed batch", vim.log.levels.INFO, {})
 		globals.typed_letters = {}
 	end
 
