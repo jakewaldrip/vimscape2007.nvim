@@ -1,6 +1,5 @@
 local vimscape = require("vimscape_backend")
 local globals = require("globals")
-local config = require("config")
 
 ---@class Keys
 local M = {}
