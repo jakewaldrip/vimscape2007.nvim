@@ -11,7 +11,6 @@ use crate::{
 };
 
 pub fn process_batch((input, db_path): (String, String)) -> bool {
-    nvim_oxi::print!("DB_PATH: {}", db_path);
     let mut lexer = Token::lexer(&input);
     let mut skills: HashMap<String, i32> = HashMap::new();
 
@@ -36,7 +35,6 @@ pub fn process_batch((input, db_path): (String, String)) -> bool {
         }
     };
 
-    nvim_oxi::print!("Results: {:?}", skills);
     write_results_to_table(&conn, skills);
     true
 }

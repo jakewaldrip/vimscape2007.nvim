@@ -24,15 +24,11 @@ pub fn create_tables(conn: &Connection) -> () {
 
 pub fn write_results_to_table(conn: &Connection, skills: HashMap<String, i32>) -> () {
     for (key, exp) in skills {
-        nvim_oxi::print!("Key: {}, exp: {}", key, exp);
-        let res = conn.execute(
+        let _ = conn.execute(
             "update skills set exp = exp + ?1 where name = ?2",
             params![exp, key],
         );
-        nvim_oxi::print!("Result: {:?}", res);
     }
-
-    nvim_oxi::print!("Conn: {:?}", conn);
 }
 
 fn create_skills_table(conn: &Connection) -> () {
