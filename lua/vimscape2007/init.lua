@@ -23,6 +23,11 @@ M.setup = function(opts)
 	vimscape.setup_tables(config.db_path)
 
 	M.create_user_commands()
+
+	-- Where the magic happens
+	vim.on_key(function(key)
+		keys.record_keys(key, config.db_path, config.batch_size)
+	end, ns)
 end
 
 M.toggle = function()
@@ -71,9 +76,6 @@ M.show_details = function(word)
 	-- Solution possibly to remake buffer every time, and define it locally?
 	-- vim.bo[window_config.vimscape_details_bufnr].modifiable = false
 end
-
--- Where the magic happens
-vim.on_key(keys.record_keys, ns)
 
 M.create_user_commands = function()
 	vim.api.nvim_create_user_command("Vimscape", function(cmd_opts)

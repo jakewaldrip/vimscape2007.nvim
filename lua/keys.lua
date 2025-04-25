@@ -36,7 +36,7 @@ M.sanitize_key = function(key)
 	return translated
 end
 
-M.record_keys = function(key)
+M.record_keys = function(key, db_path, batch_size)
 	-- Return if we're not actively listening
 	if not globals.active then
 		return
@@ -54,9 +54,9 @@ M.record_keys = function(key)
 		return
 	end
 
-	if #globals.typed_letters >= config.batch_size then
+	if #globals.typed_letters >= batch_size then
 		local string_value = table.concat(globals.typed_letters)
-		vimscape.process_batch(string_value, config.db_path)
+		vimscape.process_batch(string_value, db_path)
 		vim.notify("Processed batch", vim.log.levels.INFO, {})
 		globals.typed_letters = {}
 	end
