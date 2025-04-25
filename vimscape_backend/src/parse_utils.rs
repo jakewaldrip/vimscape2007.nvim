@@ -75,6 +75,10 @@ pub fn parse_action_into_skill(token: Result<Token, ()>) -> Option<Skills> {
             let experience = base_experience * modifier;
             return Some(Skills::TextManipulation(experience));
         }
+        Ok(Token::Command(was_command_escaped)) => {
+            let base_experience = if was_command_escaped { 1 } else { 10 };
+            return Some(Skills::Finesse(base_experience));
+        }
         Ok(Token::HelpPage(was_command_escaped)) => {
             let base_experience = if was_command_escaped { 1 } else { 10 };
             return Some(Skills::Knowledge(base_experience));

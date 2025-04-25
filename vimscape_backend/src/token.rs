@@ -108,7 +108,10 @@ pub enum Token {
     #[regex(r"(?:[1-9]{1}\d{0,})?x", pull_modifier_from_single_movement)]
     DeleteText(i32),
 
-    #[regex(r":(?:h|help) [a-zA-z0-9]{0,}(?:\|enter\||<Esc>)", was_command_escaped)]
+    #[regex(r":[a-zA-Z0-9 ]{0,}(?:\|enter\||<Esc>)", was_command_escaped)]
+    Command(bool),
+
+    #[regex(r":(?:h|help) [a-zA-Z0-9]{0,}(?:\|enter\||<Esc>)", was_command_escaped)]
     HelpPage(bool),
 
     #[regex(r#":w(?:\|enter\||<Esc>)"#, was_command_escaped)]
@@ -565,5 +568,21 @@ fn save_file() {
     assert_eq!(lexer.next(), Some(Ok(Token::SaveFile(true))));
     assert_eq!(lexer.next(), Some(Ok(Token::MoveVerticalBasic(1))));
     assert_eq!(lexer.next(), Some(Ok(Token::SaveFile(false))));
+    assert_eq!(lexer.next(), None);
+}
+
+#[test]
+fn gracefully_handles_commands() {
+    const TEST_INPUT: &str = ":Vimscape|enter|";
+    let mut lexer = Token::lexer(TEST_INPUT);
+    assert_eq!(lexer.next(), Some(Ok(Token::Command(false))));
+    assert_eq!(lexer.next(), None);
+}
+
+#[test]
+fn gracefully_handles_commands_with_space() {
+    const TEST_INPUT: &str = ":Vimscape toggle<Esc>";
+    let mut lexer = Token::lexer(TEST_INPUT);
+    assert_eq!(lexer.next(), Some(Ok(Token::Command(true))));
     assert_eq!(lexer.next(), None);
 }
