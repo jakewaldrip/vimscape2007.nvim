@@ -3,6 +3,7 @@ use nvim_oxi::{self as oxi, Dictionary, Function, Object};
 
 mod api;
 mod db;
+mod levels;
 mod parse_utils;
 mod skill_data;
 mod skills;

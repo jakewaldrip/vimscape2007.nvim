@@ -4,7 +4,11 @@ use logos::Logos;
 use rusqlite::Connection;
 
 use crate::{
-    db::{create_tables, get_skill_data, get_skill_details_from_db, write_results_to_table},
+    db::{
+        create_tables, get_skill_data, get_skill_details_from_db, write_exp_to_table,
+        write_levels_to_table,
+    },
+    levels::{get_levels_diff, get_updated_levels, notify_level_ups},
     parse_utils::parse_action_into_skill,
     skill_data::{format_skill_data, format_skill_details},
     token::Token,
@@ -35,7 +39,14 @@ pub fn process_batch((input, db_path): (String, String)) -> bool {
         }
     };
 
-    write_results_to_table(&conn, skills);
+    let skill_data = get_skill_data(&conn).expect("Failed to query for skill data");
+    let updated_levels = get_updated_levels(&skill_data, &skills);
+    let levels_diff = get_levels_diff(&skill_data, &updated_levels);
+
+    write_levels_to_table(&conn, &levels_diff);
+    write_exp_to_table(&conn, skills);
+    notify_level_ups(&levels_diff);
+
     true
 }
 
@@ -48,7 +59,7 @@ pub fn get_user_data((col_len, db_path): (i32, String)) -> Vec<String> {
         }
     };
 
-    let skill_data = get_skill_data(&conn).expect("Failed to connect to database");
+    let skill_data = get_skill_data(&conn).expect("Failed to query for skill data");
     let display_strings: Vec<String> = format_skill_data(&skill_data, col_len);
     display_strings
 }

@@ -22,11 +22,20 @@ pub fn create_tables(conn: &Connection) -> () {
     populate_skills_enum_table(&conn);
 }
 
-pub fn write_results_to_table(conn: &Connection, skills: HashMap<String, i32>) -> () {
+pub fn write_exp_to_table(conn: &Connection, skills: HashMap<String, i32>) -> () {
     for (key, exp) in skills {
         let _ = conn.execute(
             "update skills set exp = exp + ?1 where name = ?2",
             params![exp, key],
+        );
+    }
+}
+
+pub fn write_levels_to_table(conn: &Connection, levels_diff: &HashMap<String, i32>) -> () {
+    for (key, level) in levels_diff {
+        let _ = conn.execute(
+            "update skills set level = ?1 where name = ?2",
+            params![level, key],
         );
     }
 }
