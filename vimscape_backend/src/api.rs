@@ -69,7 +69,7 @@ pub fn setup_tables(db_path: String) {
         Ok(conn) => conn,
         Err(_) => {
             println!("Failed to connect to database");
-            return ();
+            return;
         }
     };
 
@@ -87,8 +87,8 @@ pub fn get_skill_details((c_word, db_path): (String, String)) -> Vec<String> {
 
     let skill_data_vec =
         get_skill_details_from_db(&conn, &c_word).expect("Failed to get skills from database");
-    if let Some(skill_data) = skill_data_vec.get(0) {
-        format_skill_details(&skill_data)
+    if let Some(skill_data) = skill_data_vec.first() {
+        format_skill_details(skill_data)
     } else {
         Vec::new()
     }

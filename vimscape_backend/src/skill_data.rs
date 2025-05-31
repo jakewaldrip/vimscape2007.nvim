@@ -1,4 +1,4 @@
-use std::iter::repeat;
+use std::iter::repeat_n;
 
 // Border chars
 // │ ┌ ┐ └ ┘
@@ -17,7 +17,7 @@ const MIN_SPACE: i32 = 6;
 // (COL_WIDTH * MAX_NUM_COLS) - MAX_NUM_COLS + 1 + MIN_SPACE
 const MAX_WIDTH: i32 = (COL_WIDTH * MAX_NUM_COLS) - MAX_NUM_COLS + MIN_SPACE + 1;
 
-pub fn format_skill_data(skill_data: &Vec<SkillData>, col_len: i32) -> Vec<String> {
+pub fn format_skill_data(skill_data: &[SkillData], col_len: i32) -> Vec<String> {
     let num_cols = get_num_cols(&col_len);
     let mut lines: Vec<String> = Vec::new();
 
@@ -57,7 +57,7 @@ pub fn format_skill_data(skill_data: &Vec<SkillData>, col_len: i32) -> Vec<Strin
             };
 
             let level_str: String = if skill.level < 10 {
-                format!("0{}", skill.level.to_string())
+                format!("0{}", skill.level)
             } else {
                 skill.level.to_string()
             };
@@ -73,7 +73,7 @@ pub fn format_skill_data(skill_data: &Vec<SkillData>, col_len: i32) -> Vec<Strin
                 level_padding.clone()
             };
 
-            curr_skill_line.push_str(&skill_left_padding);
+            curr_skill_line.push_str(skill_left_padding);
             curr_skill_line.push_str(&skill.skill_name);
             curr_skill_line.push_str(&skill_padding);
 
@@ -98,53 +98,44 @@ pub fn format_skill_data(skill_data: &Vec<SkillData>, col_len: i32) -> Vec<Strin
 
 fn create_top_line(num_cols: &i32, global_padding: String) -> String {
     let horizontal_boundary_width: usize = ((COL_WIDTH * num_cols) - 1).try_into().unwrap();
-    let horizontal_line: String = repeat("─")
-        .take(horizontal_boundary_width)
-        .collect::<String>();
+    let horizontal_line: String = repeat_n("─", horizontal_boundary_width).collect::<String>();
 
     let mut top_line: String = global_padding;
     top_line.push('┌');
     top_line.push_str(&horizontal_line);
     top_line.push('┐');
-    return top_line.clone();
+    top_line.clone()
 }
 
 fn create_bottom_line(num_cols: &i32, global_padding: String) -> String {
     let horizontal_boundary_width: usize = ((COL_WIDTH * num_cols) - 1).try_into().unwrap();
-    let horizontal_line: String = repeat("─")
-        .take(horizontal_boundary_width)
-        .collect::<String>();
+    let horizontal_line: String = repeat_n("─", horizontal_boundary_width).collect::<String>();
 
     let mut bottom_line: String = global_padding;
     bottom_line.push('└');
     bottom_line.push_str(&horizontal_line);
     bottom_line.push('┘');
 
-    return bottom_line.clone();
+    bottom_line.clone()
 }
 
 fn get_padding(char_count: &i32) -> String {
     let padding_amount: i32 = (COL_WIDTH - char_count) / 2;
-    let padding_space: String = repeat(" ")
-        .take(padding_amount as usize)
-        .collect::<String>();
+    let padding_space: String = repeat_n(" ", padding_amount as usize).collect::<String>();
     padding_space
 }
 
 fn get_adjusted_padding(char_count: &i32) -> String {
     let padding_amount: i32 = (COL_WIDTH - char_count) / 2;
-    let adjusted_padding_space: String = repeat(" ")
-        .take((padding_amount - 1) as usize)
-        .collect::<String>();
+    let adjusted_padding_space: String =
+        repeat_n(" ", (padding_amount - 1) as usize).collect::<String>();
     adjusted_padding_space
 }
 
 fn get_global_left_padding(col_len: &i32, num_cols: &i32) -> String {
     let full_box_width: i32 = (*num_cols * COL_WIDTH) - MAX_NUM_COLS + 1;
     let padding_amount: i32 = (*col_len - full_box_width) / 2;
-    let padding_space: String = repeat(" ")
-        .take(padding_amount as usize)
-        .collect::<String>();
+    let padding_space: String = repeat_n(" ", padding_amount as usize).collect::<String>();
     padding_space
 }
 
@@ -158,7 +149,7 @@ fn get_num_cols(col_len: &i32) -> i32 {
         return MAX_NUM_COLS;
     }
 
-    return num_possible_cols;
+    num_possible_cols
 }
 
 pub fn format_skill_details(skill_data: &SkillData) -> Vec<String> {

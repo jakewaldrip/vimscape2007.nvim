@@ -42,7 +42,7 @@ pub enum Token {
     JumpToVertical,
 
     // % renders as the token below
-    #[token(":<C-U>call<Space>matchit#Match_wrapper('',1,'n')|enter|m'zv")]
+    #[token(r":<C-U>call<Space>matchit#Match_wrapper('',1,'n')|enter|m'zv")]
     JumpFromContext,
 
     // zz renders as zzz
@@ -120,7 +120,7 @@ pub enum Token {
     #[regex(r"[a-zA-Z0-9_:<>]", priority = 1)]
     #[token("|enter|", priority = 1)]
     #[token("<Esc>", priority = 1)]
-    UnhandledToken,
+    Unhandled,
 }
 
 // This is used if we have a match fail, but can match a more specific regex and find it
@@ -139,7 +139,7 @@ fn pull_modifier_from_single_movement(lex: &mut Lexer<Token>) -> Option<i32> {
 
 fn pull_modifier_from_arbitrary_location(lex: &mut Lexer<Token>) -> Option<i32> {
     let slice = lex.slice();
-    let digits: String = slice.chars().filter(|char| char.is_digit(10)).collect();
+    let digits: String = slice.chars().filter(|char| char.is_ascii_digit()).collect();
     let value: Option<i32> = digits.parse().ok();
     match value {
         Some(num) => Some(num),
@@ -151,8 +151,8 @@ fn pull_modifier_from_arbitrary_location(lex: &mut Lexer<Token>) -> Option<i32> 
 // cut off first char if more than 1 exists
 fn pull_modifier_from_arbitrary_location_hacky_version(lex: &mut Lexer<Token>) -> Option<i32> {
     let slice = lex.slice();
-    let mut digit_vec: Vec<char> = slice.chars().filter(|char| char.is_digit(10)).collect();
-    if digit_vec.len() == 0 {
+    let mut digit_vec: Vec<char> = slice.chars().filter(|char| char.is_ascii_digit()).collect();
+    if digit_vec.is_empty() {
         return Some(1);
     } else if digit_vec.len() > 1 {
         digit_vec.remove(0);
@@ -207,7 +207,7 @@ fn basic_horizontal_movements() {
     assert_eq!(lexer.slice(), "5l");
     assert_eq!(lexer.next(), Some(Ok(Token::MoveHorizontalBasic(1))));
     assert_eq!(lexer.slice(), "h");
-    assert_eq!(lexer.next(), Some(Ok(Token::UnhandledToken)));
+    assert_eq!(lexer.next(), Some(Ok(Token::Unhandled)));
     assert_eq!(lexer.next(), Some(Ok(Token::MoveHorizontalBasic(1))));
     assert_eq!(lexer.slice(), "h");
     assert_eq!(lexer.next(), None);
@@ -541,11 +541,11 @@ fn delete_text_word() {
 fn unhandled_tokens() {
     const TEST_INPUT: &str = ">|enter|<Esc>";
     let mut lexer = Token::lexer(TEST_INPUT);
-    assert_eq!(lexer.next(), Some(Ok(Token::UnhandledToken)));
+    assert_eq!(lexer.next(), Some(Ok(Token::Unhandled)));
     assert_eq!(lexer.slice(), ">");
-    assert_eq!(lexer.next(), Some(Ok(Token::UnhandledToken)));
+    assert_eq!(lexer.next(), Some(Ok(Token::Unhandled)));
     assert_eq!(lexer.slice(), "|enter|");
-    assert_eq!(lexer.next(), Some(Ok(Token::UnhandledToken)));
+    assert_eq!(lexer.next(), Some(Ok(Token::Unhandled)));
     assert_eq!(lexer.slice(), "<Esc>");
     assert_eq!(lexer.next(), None);
 }
