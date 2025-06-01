@@ -15,7 +15,6 @@ use crate::{
 };
 
 pub fn process_batch((input, db_path): (String, String)) -> bool {
-    let mut lexer = Token::lexer(&input);
     let mut skills: HashMap<String, i32> = HashMap::new();
 
     while let Some(token) = lexer.next() {
