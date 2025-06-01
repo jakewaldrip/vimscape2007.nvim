@@ -1,6 +1,5 @@
 use std::{collections::HashMap, path::Path};
 
-use logos::Logos;
 use rusqlite::Connection;
 
 use crate::{
@@ -15,20 +14,20 @@ use crate::{
 };
 
 pub fn process_batch((input, db_path): (String, String)) -> bool {
-    let mut skills: HashMap<String, i32> = HashMap::new();
+    let skills: HashMap<String, i32> = HashMap::new();
 
-    while let Some(token) = lexer.next() {
-        if let Some(result) = parse_action_into_skill(token) {
-            let skill_str = result.to_str();
-            let new_exp = result.get_exp_from_skill();
-            match skills.get(&*skill_str) {
-                Some(total_exp) => skills.insert(skill_str, new_exp + total_exp),
-                None => skills.insert(skill_str, new_exp),
-            };
-        } else {
-            println!("Failed to parse: {}", lexer.slice());
-        }
-    }
+    // while let Some(token) = lexer.next() {
+    //     if let Some(result) = parse_action_into_skill(token) {
+    //         let skill_str = result.to_str();
+    //         let new_exp = result.get_exp_from_skill();
+    //         match skills.get(&*skill_str) {
+    //             Some(total_exp) => skills.insert(skill_str, new_exp + total_exp),
+    //             None => skills.insert(skill_str, new_exp),
+    //         };
+    //     } else {
+    //         println!("Failed to parse: {}", lexer.slice());
+    //     }
+    // }
 
     let conn = match Connection::open(Path::new(&db_path).join("teste.db")) {
         Ok(conn) => conn,
