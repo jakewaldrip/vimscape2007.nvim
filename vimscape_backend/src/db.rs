@@ -46,7 +46,7 @@ fn create_skills_table(conn: &Connection) {
           id integer primary key,
           name text not null unique,
           exp integer not null default 0,
-          level integer not null default 0
+          level integer not null default 1
          )",
         (),
     );
