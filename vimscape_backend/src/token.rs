@@ -2,7 +2,7 @@
 #[derive(Debug, Clone)]
 pub enum Token {
     // gj, gk, j, k, 10j,
-    MoveVerticalBasic(String),
+    MoveVerticalBasic(i32),
 
     Unhandled(String),
     // // 10h, h, l

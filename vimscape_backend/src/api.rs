@@ -8,25 +8,25 @@ use crate::{
         write_levels_to_table,
     },
     levels::{get_levels_diff, get_updated_levels, notify_level_ups},
+    lexer::Lexer,
+    parse_utils::parse_action_into_skill,
     skill_data::{format_skill_data, format_skill_details},
-    token::Token,
 };
 
 pub fn process_batch((input, db_path): (String, String)) -> bool {
-    let skills: HashMap<String, i32> = HashMap::new();
+    let mut lexer = Lexer::new(input.chars().collect());
+    let mut skills: HashMap<String, i32> = HashMap::new();
 
-    // while let Some(token) = lexer.next() {
-    //     if let Some(result) = parse_action_into_skill(token) {
-    //         let skill_str = result.to_str();
-    //         let new_exp = result.get_exp_from_skill();
-    //         match skills.get(&*skill_str) {
-    //             Some(total_exp) => skills.insert(skill_str, new_exp + total_exp),
-    //             None => skills.insert(skill_str, new_exp),
-    //         };
-    //     } else {
-    //         println!("Failed to parse: {}", lexer.slice());
-    //     }
-    // }
+    while let Some(token) = lexer.next_token() {
+        if let Some(result) = parse_action_into_skill(token) {
+            let skill_str = result.to_str();
+            let new_exp = result.get_exp_from_skill();
+            match skills.get(&*skill_str) {
+                Some(total_exp) => skills.insert(skill_str, new_exp + total_exp),
+                None => skills.insert(skill_str, new_exp),
+            };
+        }
+    }
 
     let conn = match Connection::open(Path::new(&db_path).join("teste.db")) {
         Ok(conn) => conn,

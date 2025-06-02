@@ -4,7 +4,34 @@ pub struct Lexer {
     input: Vec<char>,
     pub position: usize,
     pub read_position: usize,
-    pub ch: char,
+    pub ch: Option<char>,
+}
+
+impl Lexer {
+    pub fn new(input: Vec<char>) -> Self {
+        Self {
+            input,
+            position: 0,
+            read_position: 0,
+            ch: None,
+        }
+    }
+
+    /// Iterates the internal character to the next
+    pub fn read_char(&mut self) {
+        if self.read_position >= self.input.len() {
+            self.ch = None;
+        } else {
+            self.ch = Some(self.input[self.read_position]);
+        }
+
+        self.position = self.read_position;
+        self.read_position += 1;
+    }
+
+    pub fn next_token(&mut self) -> Option<Token> {
+        Some(Token::Unhandled("".into()))
+    }
 }
 
 pub fn parse_tokens(input: &str) -> Vec<Token> {
@@ -13,8 +40,8 @@ pub fn parse_tokens(input: &str) -> Vec<Token> {
 
     for ch in iter {
         match ch {
-            'j' => tokens.push(Token::MoveVerticalBasic(ch.to_string())),
-            'k' => tokens.push(Token::MoveVerticalBasic(ch.to_string())),
+            'j' => tokens.push(Token::MoveVerticalBasic(1)),
+            'k' => tokens.push(Token::MoveVerticalBasic(1)),
             _ => tokens.push(Token::Unhandled(ch.to_string())),
         }
     }
