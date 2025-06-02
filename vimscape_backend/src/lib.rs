@@ -5,6 +5,7 @@ mod api;
 mod db;
 mod levels;
 mod parse_utils;
+mod parser;
 mod skill_data;
 mod skills;
 mod token;

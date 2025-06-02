@@ -8,7 +8,6 @@ use crate::{
         write_levels_to_table,
     },
     levels::{get_levels_diff, get_updated_levels, notify_level_ups},
-    parse_utils::parse_action_into_skill,
     skill_data::{format_skill_data, format_skill_details},
     token::Token,
 };
