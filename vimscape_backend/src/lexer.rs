@@ -1,52 +1,21 @@
+use std::{iter::Peekable, str::Chars};
+
 use crate::token::Token;
 
-pub struct Lexer {
-    input: Vec<char>,
-    pub position: usize,
-    pub read_position: usize,
-    pub ch: Option<char>,
+pub struct Lexer<'a> {
+    input: Peekable<Chars<'a>>,
 }
 
-impl Lexer {
-    pub fn new(input: Vec<char>) -> Self {
-        Self {
-            input,
-            position: 0,
-            read_position: 0,
-            ch: None,
-        }
-    }
-
-    /// Iterates the internal character to the next
-    pub fn read_char(&mut self) {
-        if self.read_position >= self.input.len() {
-            self.ch = None;
-        } else {
-            self.ch = Some(self.input[self.read_position]);
-        }
-
-        self.position = self.read_position;
-        self.read_position += 1;
+impl<'a> Lexer<'a> {
+    pub fn new(input: &'a str) -> Self {
+        let chars = input.chars().peekable();
+        Self { input: chars }
     }
 
     pub fn next_token(&mut self) -> Option<Token> {
+        let ch = self.input.next()?;
         Some(Token::Unhandled("".into()))
     }
-}
-
-pub fn parse_tokens(input: &str) -> Vec<Token> {
-    let mut tokens: Vec<Token> = Vec::new();
-    let iter = input.chars().peekable();
-
-    for ch in iter {
-        match ch {
-            'j' => tokens.push(Token::MoveVerticalBasic(1)),
-            'k' => tokens.push(Token::MoveVerticalBasic(1)),
-            _ => tokens.push(Token::Unhandled(ch.to_string())),
-        }
-    }
-
-    tokens
 }
 
 #[cfg(test)]
@@ -56,9 +25,12 @@ mod tests {
     #[test]
     fn wip_test() {
         let src = "jkj";
-        let output = parse_tokens(src);
+        let mut lexer = Lexer::new(src);
+
         println!("Source: {src}");
-        println!("Output: {output:?}");
+        while let Some(token) = lexer.next_token() {
+            println!("Output: {token:?}");
+        }
     }
 
     // #[test]
