@@ -2,19 +2,42 @@ use std::{iter::Peekable, str::Chars};
 
 use crate::token::Token;
 
+enum State {
+    None,
+}
+
 pub struct Lexer<'a> {
     input: Peekable<Chars<'a>>,
+    state: State,
 }
 
 impl<'a> Lexer<'a> {
     pub fn new(input: &'a str) -> Self {
         let chars = input.chars().peekable();
-        Self { input: chars }
+        Self {
+            input: chars,
+            state: State::None,
+        }
     }
 
     pub fn next_token(&mut self) -> Option<Token> {
         let ch = self.input.next()?;
-        Some(Token::Unhandled("".into()))
+
+        // Check for ascii digits
+        if ch.is_ascii_digit() {
+            // peek until theres no more digits
+            // consume this string
+            // convert to number
+            // switch state to Modifying
+            // allow match to handle next character as normal, with state adjusted
+        }
+
+        let token = match ch {
+            'j' => Token::MoveVerticalBasic(1),
+            'k' => Token::MoveVerticalBasic(1),
+            _ => Token::Unhandled(ch.into()),
+        };
+        Some(token)
     }
 }
 
@@ -24,7 +47,7 @@ mod tests {
 
     #[test]
     fn wip_test() {
-        let src = "jkj";
+        let src = "10jkj";
         let mut lexer = Lexer::new(src);
 
         println!("Source: {src}");
