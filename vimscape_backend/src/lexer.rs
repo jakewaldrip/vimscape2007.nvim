@@ -38,15 +38,17 @@ impl<'a> Lexer<'a> {
 
                 // Consume any remaining digits
                 while let Some(&ch) = self.input.peek() {
-                    if ch.is_ascii_digit() {
-                        self.input.next();
-                        self.accumulated_string.push(ch);
-                    } else {
+                    if !ch.is_ascii_digit() {
                         break;
                     }
+
+                    self.input.next();
+                    self.accumulated_string.push(ch);
                 }
+
                 return count;
             }
+
             count = new_count;
         }
 
@@ -57,20 +59,22 @@ impl<'a> Lexer<'a> {
         // Handle accumulated state from previous calls
         match self.state {
             State::AccumulatingCount(count) => {
-                // We're in accumulating state, check next character
                 if let Some(&ch) = self.input.peek() {
                     if ch.is_ascii_digit() {
                         // Continue accumulating
                         self.input.next();
                         let new_count = self.accumulate_digit(ch);
                         self.state = State::AccumulatingCount(new_count);
-                        self.next_token() // Recurse to continue processing
+
+                        // Continue accumulating
+                        self.next_token()
                     } else {
                         // Non-digit encountered, process based on what it is
                         self.state = State::None;
                         let accumulated = self.accumulated_string.clone();
                         self.accumulated_string.clear();
 
+                        // Note: Future extension for characters that accept counts goes here
                         match ch {
                             'j' | 'k' => {
                                 self.input.next(); // Consume the command
@@ -91,7 +95,6 @@ impl<'a> Lexer<'a> {
                 }
             }
             State::None => {
-                // Normal processing
                 let ch = self.input.next()?;
 
                 // Check for digits (excluding leading zero)
