@@ -2,13 +2,16 @@ use std::{iter::Peekable, str::Chars};
 
 use crate::token::Token;
 
+#[derive(Debug)]
 enum State {
     None,
+    AccumulatingCount(u32),
 }
 
 pub struct Lexer<'a> {
     input: Peekable<Chars<'a>>,
     state: State,
+    accumulated_string: String,
 }
 
 impl<'a> Lexer<'a> {
@@ -17,27 +20,94 @@ impl<'a> Lexer<'a> {
         Self {
             input: chars,
             state: State::None,
+            accumulated_string: String::new(),
         }
     }
 
-    pub fn next_token(&mut self) -> Option<Token> {
-        let ch = self.input.next()?;
-
-        // Check for ascii digits
-        if ch.is_ascii_digit() {
-            // peek until theres no more digits
-            // consume this string
-            // convert to number
-            // switch state to Modifying
-            // allow match to handle next character as normal, with state adjusted
+    fn accumulate_digit(&mut self, digit: char) -> u32 {
+        self.accumulated_string.push(digit);
+        
+        // Parse the accumulated string to get current count
+        let mut count: u32 = 0;
+        for ch in self.accumulated_string.chars() {
+            let digit_value = ch.to_digit(10).unwrap_or(0);
+            let new_count = count.saturating_mul(10).saturating_add(digit_value);
+            if new_count > 999 {
+                // Cap at 999 but continue accumulating the string
+                count = 999;
+                
+                // Consume any remaining digits
+                while let Some(&ch) = self.input.peek() {
+                    if ch.is_ascii_digit() {
+                        self.input.next();
+                        self.accumulated_string.push(ch);
+                    } else {
+                        break;
+                    }
+                }
+                return count;
+            }
+            count = new_count;
         }
+        
+        count
+    }
 
-        let token = match ch {
-            'j' => Token::MoveVerticalBasic(1),
-            'k' => Token::MoveVerticalBasic(1),
-            _ => Token::Unhandled(ch.into()),
-        };
-        Some(token)
+    pub fn next_token(&mut self) -> Option<Token> {
+        // Handle accumulated state from previous calls
+        match self.state {
+            State::AccumulatingCount(count) => {
+                // We're in accumulating state, check next character
+                if let Some(&ch) = self.input.peek() {
+                    if ch.is_ascii_digit() {
+                        // Continue accumulating
+                        self.input.next();
+                        let new_count = self.accumulate_digit(ch);
+                        self.state = State::AccumulatingCount(new_count);
+                        return self.next_token(); // Recurse to continue processing
+                    } else {
+                        // Non-digit encountered, process based on what it is
+                        self.state = State::None;
+                        let accumulated = self.accumulated_string.clone();
+                        self.accumulated_string.clear();
+                        
+                        match ch {
+                            'j' | 'k' => {
+                                self.input.next(); // Consume the command
+                                return Some(Token::MoveVerticalBasic(count as i32));
+                            }
+                            _ => {
+                                // Not a command we handle with counts
+                                return Some(Token::Unhandled(accumulated));
+                            }
+                        }
+                    }
+                } else {
+                    // End of input while accumulating
+                    self.state = State::None;
+                    let accumulated = self.accumulated_string.clone();
+                    self.accumulated_string.clear();
+                    return Some(Token::Unhandled(accumulated));
+                }
+            }
+            State::None => {
+                // Normal processing
+                let ch = self.input.next()?;
+                
+                // Check for digits (excluding leading zero)
+                if ch.is_ascii_digit() && ch != '0' {
+                    let count = self.accumulate_digit(ch);
+                    self.state = State::AccumulatingCount(count);
+                    return self.next_token(); // Recurse to process next
+                }
+                
+                // Regular token processing
+                match ch {
+                    'j' | 'k' => Some(Token::MoveVerticalBasic(1)),
+                    _ => Some(Token::Unhandled(ch.into())),
+                }
+            }
+        }
     }
 }
 
@@ -54,6 +124,93 @@ mod tests {
         while let Some(token) = lexer.next_token() {
             println!("Output: {token:?}");
         }
+        // Expected output:
+        // Token::MoveVerticalBasic(10)
+        // Token::MoveVerticalBasic(1)
+        // Token::MoveVerticalBasic(1)
+    }
+
+    #[test]
+    fn test_numeric_prefix_basic() {
+        let mut lexer = Lexer::new("5j");
+        assert!(matches!(lexer.next_token(), Some(Token::MoveVerticalBasic(5))));
+        assert!(matches!(lexer.next_token(), None));
+    }
+
+    #[test]
+    fn test_numeric_prefix_large() {
+        let mut lexer = Lexer::new("123k");
+        assert!(matches!(lexer.next_token(), Some(Token::MoveVerticalBasic(123))));
+        assert!(matches!(lexer.next_token(), None));
+    }
+
+    #[test]
+    fn test_numeric_prefix_cap() {
+        let mut lexer = Lexer::new("999j");
+        assert!(matches!(lexer.next_token(), Some(Token::MoveVerticalBasic(999))));
+        assert!(matches!(lexer.next_token(), None));
+    }
+
+    #[test]
+    fn test_numeric_prefix_overflow() {
+        let mut lexer = Lexer::new("1234567j");
+        assert!(matches!(lexer.next_token(), Some(Token::MoveVerticalBasic(999))));
+        assert!(matches!(lexer.next_token(), None));
+    }
+
+    #[test]
+    fn test_no_numeric_prefix() {
+        let mut lexer = Lexer::new("j");
+        assert!(matches!(lexer.next_token(), Some(Token::MoveVerticalBasic(1))));
+        assert!(matches!(lexer.next_token(), None));
+    }
+
+    #[test]
+    fn test_standalone_digits() {
+        let mut lexer = Lexer::new("123");
+        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "123"));
+        assert!(matches!(lexer.next_token(), None));
+    }
+
+    #[test]
+    fn test_leading_zero() {
+        let mut lexer = Lexer::new("0j");
+        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "0"));
+        assert!(matches!(lexer.next_token(), Some(Token::MoveVerticalBasic(1))));
+        assert!(matches!(lexer.next_token(), None));
+    }
+
+    #[test]
+    fn test_multiple_commands() {
+        let mut lexer = Lexer::new("2j3k");
+        assert!(matches!(lexer.next_token(), Some(Token::MoveVerticalBasic(2))));
+        assert!(matches!(lexer.next_token(), Some(Token::MoveVerticalBasic(3))));
+        assert!(matches!(lexer.next_token(), None));
+    }
+
+    #[test]
+    fn test_mixed_input() {
+        let mut lexer = Lexer::new("j5kx");
+        assert!(matches!(lexer.next_token(), Some(Token::MoveVerticalBasic(1))));
+        assert!(matches!(lexer.next_token(), Some(Token::MoveVerticalBasic(5))));
+        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "x"));
+        assert!(matches!(lexer.next_token(), None));
+    }
+
+    #[test]
+    fn test_standalone_digits_overflow() {
+        let mut lexer = Lexer::new("999999");
+        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "999999"));
+        assert!(matches!(lexer.next_token(), None));
+    }
+
+    #[test]
+    fn test_mixed_digits_and_commands() {
+        let mut lexer = Lexer::new("12x34j");
+        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "12"));
+        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "x"));
+        assert!(matches!(lexer.next_token(), Some(Token::MoveVerticalBasic(34))));
+        assert!(matches!(lexer.next_token(), None));
     }
 
     // #[test]
