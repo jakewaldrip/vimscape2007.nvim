@@ -80,6 +80,10 @@ impl<'a> Lexer<'a> {
                                 self.input.next(); // Consume the command
                                 Some(Token::MoveVerticalBasic(count as i32))
                             }
+                            'w' | 'b' => {
+                                self.input.next();
+                                Some(Token::MoveHorizontalBasic(count as i32))
+                            }
                             _ => {
                                 // Not a command we handle with counts
                                 Some(Token::Unhandled(accumulated))
@@ -107,6 +111,7 @@ impl<'a> Lexer<'a> {
                 // Regular token processing
                 match ch {
                     'j' | 'k' => Some(Token::MoveVerticalBasic(1)),
+                    'w' | 'b' => Some(Token::MoveHorizontalBasic(1)),
                     _ => Some(Token::Unhandled(ch.into())),
                 }
             }
@@ -245,6 +250,28 @@ mod tests {
         assert!(matches!(
             lexer.next_token(),
             Some(Token::MoveVerticalBasic(34))
+        ));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_move_horizontal_and_move_vertical() {
+        let mut lexer = Lexer::new("2w3kbj");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::MoveHorizontalBasic(2))
+        ));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::MoveVerticalBasic(3))
+        ));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::MoveHorizontalBasic(1))
+        ));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::MoveVerticalBasic(1))
         ));
         assert!(lexer.next_token().is_none());
     }

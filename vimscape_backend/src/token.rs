@@ -5,8 +5,9 @@ pub enum Token {
     MoveVerticalBasic(i32),
 
     Unhandled(String),
-    // // 10h, h, l
-    // MoveHorizontalBasic(String),
+
+    // 10h, h, l
+    MoveHorizontalBasic(i32),
     //
     // // 10<C-U>, <C-U>, <C-D>
     // MoveVerticalChunk(String),
