@@ -14,11 +14,11 @@ const XP_MULTIPLIER: f32 = 1.10409;
 static CUMULATIVE_XP: Lazy<[f32; 100]> = Lazy::new(|| {
     let mut xp = [0.0; 100];
     let mut total = 0.0;
-    for level in 1usize..=99 {
+    (1usize..=99).for_each(|level| {
         let delta = XP_BASE * XP_MULTIPLIER.powi(level as i32);
         total += delta;
         xp[level] = total;
-    }
+    });
     xp
 });
 
@@ -50,7 +50,7 @@ fn get_level_for_exp(exp: i32) -> i32 {
     }
     let exp_f = exp as f32;
     let idx = CUMULATIVE_XP.partition_point(|&c| c <= exp_f);
-    (idx as i32).max(1).min(99)
+    (idx as i32).clamp(1, 99)
 }
 
 /// Computes the difference in levels, returning only skills that have leveled up.
