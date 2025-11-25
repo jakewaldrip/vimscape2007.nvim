@@ -50,17 +50,17 @@ impl Skills {
 
     pub fn get_exp_from_skill(&self) -> i32 {
         match self {
-            Skills::VerticalNavigation(exp) => *exp,
-            Skills::HorizontalNavigation(exp) => *exp,
-            Skills::CodeFlow(exp) => *exp,
-            Skills::CameraMovement(exp) => *exp,
-            Skills::WindowManagement(exp) => *exp,
-            Skills::TextManipulation(exp) => *exp,
-            Skills::Clipboard(exp) => *exp,
-            Skills::Finesse(exp) => *exp,
-            Skills::Search(exp) => *exp,
-            Skills::Knowledge(exp) => *exp,
-            Skills::Saving(exp) => *exp,
+            Skills::VerticalNavigation(exp)
+            | Skills::HorizontalNavigation(exp)
+            | Skills::CodeFlow(exp)
+            | Skills::CameraMovement(exp)
+            | Skills::WindowManagement(exp)
+            | Skills::TextManipulation(exp)
+            | Skills::Clipboard(exp)
+            | Skills::Finesse(exp)
+            | Skills::Search(exp)
+            | Skills::Knowledge(exp)
+            | Skills::Saving(exp) => *exp,
         }
     }
 }

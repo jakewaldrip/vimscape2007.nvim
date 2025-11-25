@@ -1,4 +1,3 @@
-// TODO: Check what a <leader>X renders as
 #[derive(Debug, Clone)]
 pub enum Token {
     // gj, gk, j, k, 10j,
@@ -64,7 +63,7 @@ pub enum Token {
     // // .
     // DotRepeat(String),
     //
-    // // /[any characters]
+    // // /[any characters] followed by <Esc> or |enter|
     // CommandSearch(String),
     //
     // // d$, dw, etc, doubles up on every key, ie dww, d$$, etc
@@ -72,12 +71,12 @@ pub enum Token {
     // // [num doubled last digit](dww, d$$, dWW, dee, dEE, dbb, dBB, d$$, d^^, d00)
     // DeleteText(String),
     //
-    // // :[any characters]
+    // // :[any characters] followed by <Esc> or |enter|
     // Command(String),
     //
-    // // :(h, help)[any characters](|enter|, <Esc>)
+    // // :(h, help)[any characters] followed by |enter| or <Esc>
     // HelpPage(String),
     //
-    // // :w(|enter|, <Esc>)
+    // // :w followed by |enter| or <Esc>
     // SaveFile(String),
 }

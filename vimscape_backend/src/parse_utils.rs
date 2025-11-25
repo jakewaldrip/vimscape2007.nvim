@@ -1,6 +1,6 @@
 use crate::{skills::Skills, token::Token};
 
-pub fn parse_action_into_skill(token: Token) -> Option<Skills> {
+pub fn parse_action_into_skill(token: &Token) -> Option<Skills> {
     match token {
         Token::MoveVerticalBasic(modifier) => {
             let base_experience = 1;

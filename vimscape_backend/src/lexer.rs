@@ -78,11 +78,11 @@ impl<'a> Lexer<'a> {
                         match ch {
                             'j' | 'k' => {
                                 self.input.next(); // Consume the command
-                                Some(Token::MoveVerticalBasic(count as i32))
+                                Some(Token::MoveVerticalBasic(i32::try_from(count).unwrap()))
                             }
                             'w' | 'b' => {
                                 self.input.next();
-                                Some(Token::MoveHorizontalBasic(count as i32))
+                                Some(Token::MoveHorizontalBasic(i32::try_from(count).unwrap()))
                             }
                             _ => {
                                 // Not a command we handle with counts
@@ -122,21 +122,6 @@ impl<'a> Lexer<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn wip_test() {
-        let src = "10jkj";
-        let mut lexer = Lexer::new(src);
-
-        println!("Source: {src}");
-        while let Some(token) = lexer.next_token() {
-            println!("Output: {token:?}");
-        }
-        // Expected output:
-        // Token::MoveVerticalBasic(10)
-        // Token::MoveVerticalBasic(1)
-        // Token::MoveVerticalBasic(1)
-    }
 
     #[test]
     fn test_numeric_prefix_basic() {

@@ -4,18 +4,17 @@ use nvim_oxi::{
     api::{notify, types::LogLevel},
     Dictionary,
 };
-use once_cell::sync::Lazy;
 
 use crate::skill_data::SkillData;
 
 const XP_BASE: f32 = 75.0;
 const XP_MULTIPLIER: f32 = 1.10409;
 
-static CUMULATIVE_XP: Lazy<[f32; 100]> = Lazy::new(|| {
+static CUMULATIVE_XP: std::sync::LazyLock<[f32; 100]> = std::sync::LazyLock::new(|| {
     let mut xp = [0.0; 100];
     let mut total = 0.0;
     (1usize..=99).for_each(|level| {
-        let delta = XP_BASE * XP_MULTIPLIER.powi(level as i32);
+        let delta = XP_BASE * XP_MULTIPLIER.powi(i32::try_from(level).unwrap());
         total += delta;
         xp[level] = total;
     });
@@ -24,7 +23,7 @@ static CUMULATIVE_XP: Lazy<[f32; 100]> = Lazy::new(|| {
 
 /// Updates skill levels based on batch XP gains.
 ///
-/// Returns a map of skill names to their new levels for skills that have XP in batch_xp.
+/// Returns a map of skill names to their new levels for skills that have XP in `batch_xp`.
 pub fn get_updated_levels(
     skill_data: &[SkillData],
     batch_xp: &HashMap<String, i32>,
@@ -48,14 +47,15 @@ fn get_level_for_exp(exp: i32) -> i32 {
     if exp < 0 {
         return 1;
     }
+
     let exp_f = exp as f32;
     let idx = CUMULATIVE_XP.partition_point(|&c| c <= exp_f);
-    (idx as i32).clamp(1, 99)
+    (i32::try_from(idx).unwrap()).clamp(1, 99)
 }
 
 /// Computes the difference in levels, returning only skills that have leveled up.
 ///
-/// Returns a map of skill names to their new levels where new_level > old_level.
+/// Returns a map of skill names to their new levels where `new_level` > `old_level`.
 pub fn get_levels_diff(
     skill_data: &[SkillData],
     new_levels: &HashMap<String, i32>,
@@ -82,7 +82,7 @@ pub fn notify_level_ups(levels_diff: &HashMap<String, i32>) {
             LogLevel::Info,
             &notify_opts,
         ) {
-            eprintln!("Failed to notify level up for {skill_name}: {:?}", e);
+            eprintln!("Failed to notify level up for {skill_name}: {e:?}");
         }
     }
 }
@@ -150,42 +150,42 @@ mod tests {
 
     #[test]
     fn get_level_for_exp_level_50() {
-        let exp = 105000;
+        let exp = 105_000;
         let result = get_level_for_exp(exp);
         assert_eq!(result, 50);
     }
 
     #[test]
     fn get_level_for_exp_level_60() {
-        let exp = 290000;
+        let exp = 290_000;
         let result = get_level_for_exp(exp);
         assert_eq!(result, 60);
     }
 
     #[test]
     fn get_level_for_exp_level_70() {
-        let exp = 750000;
+        let exp = 750_000;
         let result = get_level_for_exp(exp);
         assert_eq!(result, 70);
     }
 
     #[test]
     fn get_level_for_exp_level_80() {
-        let exp = 2000000;
+        let exp = 2_000_000;
         let result = get_level_for_exp(exp);
         assert_eq!(result, 80);
     }
 
     #[test]
     fn get_level_for_exp_level_90() {
-        let exp = 5500000;
+        let exp = 5_500_000;
         let result = get_level_for_exp(exp);
         assert_eq!(result, 90);
     }
 
     #[test]
     fn get_level_for_exp_level_99() {
-        let exp = 14000000;
+        let exp = 14_000_000;
         let result = get_level_for_exp(exp);
         assert_eq!(result, 99);
     }

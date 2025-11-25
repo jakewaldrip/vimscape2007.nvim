@@ -18,7 +18,7 @@ pub fn process_batch((input, db_path): (String, String)) -> bool {
     let mut skills: HashMap<String, i32> = HashMap::new();
 
     while let Some(token) = lexer.next_token() {
-        if let Some(result) = parse_action_into_skill(token) {
+        if let Some(result) = parse_action_into_skill(&token) {
             let skill_str = result.to_str();
             let new_exp = result.get_exp_from_skill();
             match skills.get(&*skill_str) {
@@ -28,12 +28,9 @@ pub fn process_batch((input, db_path): (String, String)) -> bool {
         }
     }
 
-    let conn = match Connection::open(Path::new(&db_path).join("teste.db")) {
-        Ok(conn) => conn,
-        Err(_) => {
-            println!("Failed to connect to database");
-            return false;
-        }
+    let Ok(conn) = Connection::open(Path::new(&db_path).join("teste.db")) else {
+        println!("Failed to connect to database");
+        return false;
     };
 
     let skill_data = get_skill_data(&conn).expect("Failed to query for skill data");
@@ -48,12 +45,9 @@ pub fn process_batch((input, db_path): (String, String)) -> bool {
 }
 
 pub fn get_user_data((col_len, db_path): (i32, String)) -> Vec<String> {
-    let conn = match Connection::open(Path::new(&db_path).join("teste.db")) {
-        Ok(conn) => conn,
-        Err(_) => {
-            println!("Failed to connect to database");
-            return Vec::new();
-        }
+    let Ok(conn) = Connection::open(Path::new(&db_path).join("teste.db")) else {
+        println!("Failed to connect to database");
+        return Vec::new();
     };
 
     let skill_data = get_skill_data(&conn).expect("Failed to query for skill data");
@@ -61,25 +55,20 @@ pub fn get_user_data((col_len, db_path): (i32, String)) -> Vec<String> {
     display_strings
 }
 
+#[allow(clippy::needless_pass_by_value)]
 pub fn setup_tables(db_path: String) {
-    let conn = match Connection::open(Path::new(&db_path).join("teste.db")) {
-        Ok(conn) => conn,
-        Err(_) => {
-            println!("Failed to connect to database");
-            return;
-        }
+    let Ok(conn) = Connection::open(Path::new(&db_path).join("teste.db")) else {
+        println!("Failed to connect to database");
+        return;
     };
 
     create_tables(&conn);
 }
 
 pub fn get_skill_details((c_word, db_path): (String, String)) -> Vec<String> {
-    let conn = match Connection::open(Path::new(&db_path).join("teste.db")) {
-        Ok(conn) => conn,
-        Err(_) => {
-            println!("Failed to connect to database");
-            return Vec::new();
-        }
+    let Ok(conn) = Connection::open(Path::new(&db_path).join("teste.db")) else {
+        println!("Failed to connect to database");
+        return Vec::new();
     };
 
     let skill_data_vec =
