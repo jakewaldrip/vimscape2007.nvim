@@ -7,6 +7,10 @@ local config = require("config")
 
 local ns = vim.api.nvim_create_namespace("vimscape_keys")
 
+local record_key = function(key)
+	keys.record_keys(key, config.db_path, config.batch_size, config)
+end
+
 ---@class Vimscape2007
 ---@field setup function Setup the plugin. Sets up commands, config, and inits database
 ---@field toggle function Toggles recording
@@ -17,32 +21,40 @@ local M = {}
 
 ---@param opts Config?
 M.setup = function(opts)
-	vim.notify("Ran setup for Vimscape", vim.log.levels.INFO)
+	if vim.log.levels.INFO >= config.log_level then
+		vim.notify("Ran setup for Vimscape", vim.log.levels.INFO)
+	end
 
 	config = vim.tbl_deep_extend("force", config, opts or {})
 	vimscape.setup_tables(config.db_path)
 
 	M.create_user_commands()
-
-	-- Where the magic happens
-	vim.on_key(function(key)
-		keys.record_keys(key, config.db_path, config.batch_size)
-	end, ns)
 end
 
 M.toggle = function()
-	globals.active = not globals.active
+	globals.set_active(not globals.get_active())
 
-	if globals.active then
-		vim.notify("Vimscape recording started", vim.log.levels.INFO, {})
+	if globals.get_active() then
+		if vim.log.levels.INFO >= config.log_level then
+			vim.notify("Vimscape recording started", vim.log.levels.INFO, {})
+		end
+		vim.on_key(record_key, ns)
 	else
-		vim.notify("Vimscape recording paused", vim.log.levels.INFO, {})
+		if vim.log.levels.INFO >= config.log_level then
+			vim.notify("Vimscape recording paused", vim.log.levels.INFO, {})
+		end
+		vim.on_key(nil, ns)
 		vim.api.nvim_buf_clear_namespace(0, ns, 0, -1)
-		globals.typed_letters = {}
+		globals.clear_typed_letters()
 	end
 end
 
 M.show_data = function()
+	if vim.api.nvim_buf_is_valid(window_config.vimscape_stats_bufnr) then
+		vim.api.nvim_buf_delete(window_config.vimscape_stats_bufnr, { force = true })
+	end
+	window_config.vimscape_stats_bufnr = vim.api.nvim_create_buf(false, true)
+
 	vim.keymap.set("n", "q", ":q<CR>", { silent = true, buffer = window_config.vimscape_stats_bufnr })
 	vim.keymap.set(
 		"n",
@@ -51,52 +63,70 @@ M.show_data = function()
 		{ silent = true, buffer = window_config.vimscape_stats_bufnr }
 	)
 
-	local bufr_width = window_config.stat_window_config.width
+	local stat_config = window_config.stat_window_config()
+	local bufr_width = stat_config.width
 	local user_data = vimscape.get_user_data(bufr_width, config.db_path)
 
-	vim.api.nvim_open_win(window_config.vimscape_stats_bufnr, true, window_config.stat_window_config)
+	vim.api.nvim_open_win(window_config.vimscape_stats_bufnr, true, stat_config)
 	vim.api.nvim_buf_set_lines(window_config.vimscape_stats_bufnr, 0, -1, false, {})
 	utils.print_to_buffer(user_data, window_config.vimscape_stats_bufnr)
 
-	-- See below
-	-- vim.bo[window_config.vimscape_stats_bufnr].modifiable = false
+	vim.bo[window_config.vimscape_stats_bufnr].modifiable = false
 end
 
 M.show_details = function(word)
+	if vim.api.nvim_buf_is_valid(window_config.vimscape_details_bufnr) then
+		vim.api.nvim_buf_delete(window_config.vimscape_details_bufnr, { force = true })
+	end
+	window_config.vimscape_details_bufnr = vim.api.nvim_create_buf(false, true)
+
 	vim.keymap.set("n", "q", ":q<CR>", { silent = true, buffer = window_config.vimscape_details_bufnr })
 
 	local details_data = vimscape.get_skill_details(word, config.db_path)
 
-	window_config.details_window_config["title"] = word
-	vim.api.nvim_open_win(window_config.vimscape_details_bufnr, true, window_config.details_window_config)
+	local details_config = window_config.details_window_config()
+	details_config.title = word
+	vim.api.nvim_open_win(window_config.vimscape_details_bufnr, true, details_config)
 	vim.api.nvim_buf_set_lines(window_config.vimscape_details_bufnr, 0, -1, false, {})
 	utils.print_to_buffer(details_data, window_config.vimscape_details_bufnr)
 
-	-- Issue: Can't open a second time since it's not modifiable
-	-- Solution possibly to remake buffer every time, and define it locally?
-	-- vim.bo[window_config.vimscape_details_bufnr].modifiable = false
+	vim.bo[window_config.vimscape_details_bufnr].modifiable = false
 end
 
 M.create_user_commands = function()
 	vim.api.nvim_create_user_command("Vimscape", function(cmd_opts)
 		local command = cmd_opts.args
 
+		if command == "" then
+			vim.notify("Vimscape commands: stats, details, toggle", vim.log.levels.INFO)
+			return
+		end
+
 		-- Show details
 		if command == "details" then
 			local word = vim.fn.expand("<cword>")
 			M.show_details(word)
-		end
-
-		-- Show stats
-		if command == "stats" then
+		elseif command == "stats" then
 			M.show_data()
-		end
-
-		-- Toggle recording
-		if command == "toggle" then
+		elseif command == "toggle" then
 			M.toggle()
+		else
+			vim.notify("Invalid Vimscape command. Use: stats, details, toggle", vim.log.levels.WARN)
 		end
-	end, { nargs = 1 })
+	end, {
+		nargs = "?",
+		complete = function(arg_lead, cmd_line, cursor_pos)
+			local commands = { "stats", "details", "toggle" }
+			local matches = {}
+			for _, cmd in ipairs(commands) do
+				if cmd:find(arg_lead, 1, true) == 1 then
+					table.insert(matches, cmd)
+				end
+			end
+			return matches
+		end,
+		desc = "Vimscape plugin commands: stats, details, toggle"
+	})
 end
 
 return M
