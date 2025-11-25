@@ -14,7 +14,7 @@ const MAX_NUM_COLS: i32 = 3;
 const COL_WIDTH: i32 = 25;
 // Min buffer around the columns
 const MIN_SPACE: i32 = 6;
-// (COL_WIDTH * MAX_NUM_COLS) - MAX_NUM_COLS + 1 + MIN_SPACE
+// Total width for max columns: (columns * width) - (separators between columns) + 1 (for border) + min space
 const MAX_WIDTH: i32 = (COL_WIDTH * MAX_NUM_COLS) - MAX_NUM_COLS + MIN_SPACE + 1;
 
 pub fn format_skill_data(skill_data: &[SkillData], col_len: i32) -> Vec<String> {
@@ -30,110 +30,77 @@ pub fn format_skill_data(skill_data: &[SkillData], col_len: i32) -> Vec<String> 
     // Padding
     let global_padding = get_global_left_padding(&col_len, &num_cols);
 
-    let batched_skills: Vec<&[SkillData]> = skill_data.chunks(num_cols as usize).collect();
+    let skill_batches: Vec<&[SkillData]> = skill_data.chunks(num_cols as usize).collect();
 
-    for skill_batch in batched_skills {
-        let top_line = create_top_line(&(skill_batch.len() as i32), global_padding.clone());
-        lines.push(top_line.clone());
+    for skill_batch in skill_batches {
+        let top_line = create_boundary_line(&(skill_batch.len() as i32), &global_padding, '┌', '┐');
+        lines.push(top_line);
 
-        let mut curr_skill_line: String = global_padding.clone();
-        let mut curr_level_line: String = global_padding.clone();
+        let mut skill_line: String = global_padding.clone();
+        let mut level_line: String = global_padding.clone();
 
         for skill in skill_batch {
-            curr_skill_line.push('│');
-            curr_level_line.push('│');
+            skill_line.push('│');
+            level_line.push('│');
 
+            // Center skill name: adjust left padding if odd length for better alignment
             let skill_char_count = skill.skill_name.chars().count() as i32;
-            let level_char_count = skill.level.to_string().chars().count() as i32;
+            let (skill_left_padding, skill_right_padding) = get_paddings(skill_char_count, skill_char_count % 2 != 0);
 
-            let skill_padding = get_padding(&skill_char_count);
-            let skill_adjusted_padding = get_adjusted_padding(&skill_char_count);
-            let level_padding = get_padding(&level_char_count);
-
-            let skill_left_padding = if skill_char_count % 2 == 0 {
-                &skill_padding
-            } else {
-                &skill_adjusted_padding
-            };
-
+            // Format level with leading zero if < 10, and center with adjusted padding
             let level_str: String = if skill.level < 10 {
                 format!("0{}", skill.level)
             } else {
                 skill.level.to_string()
             };
+            let level_char_count = level_str.chars().count() as i32;
+            let (level_left_padding, level_right_padding) = get_paddings(level_char_count, skill.level < 10);
 
-            let level_left_padding: String = if skill.level < 10 {
-                get_adjusted_padding(&level_char_count)
-            } else {
-                level_padding.clone()
-            };
-            let level_right_padding: String = if skill.level < 10 {
-                get_adjusted_padding(&level_char_count)
-            } else {
-                level_padding.clone()
-            };
+            skill_line.push_str(&skill_left_padding);
+            skill_line.push_str(&skill.skill_name);
+            skill_line.push_str(&skill_right_padding);
 
-            curr_skill_line.push_str(skill_left_padding);
-            curr_skill_line.push_str(&skill.skill_name);
-            curr_skill_line.push_str(&skill_padding);
-
-            curr_level_line.push_str(&level_left_padding);
-            curr_level_line.push_str(&level_str);
-            curr_level_line.push_str(&level_right_padding);
+            level_line.push_str(&level_left_padding);
+            level_line.push_str(&level_str);
+            level_line.push_str(&level_right_padding);
         }
 
-        curr_skill_line.push('│');
-        lines.push(curr_skill_line);
+        skill_line.push('│');
+        lines.push(skill_line);
 
-        curr_level_line.push('│');
-        lines.push(curr_level_line);
+        level_line.push('│');
+        lines.push(level_line);
 
-        let bottom_line = create_bottom_line(&(skill_batch.len() as i32), global_padding.clone());
-        lines.push(bottom_line.clone());
+        let bottom_line = create_boundary_line(&(skill_batch.len() as i32), &global_padding, '└', '┘');
+        lines.push(bottom_line);
     }
 
     // ----
     lines
 }
 
-fn create_top_line(num_cols: &i32, global_padding: String) -> String {
-    let horizontal_boundary_width: usize = ((COL_WIDTH * num_cols) - 1).try_into().unwrap();
+fn create_boundary_line(num_cols: &i32, global_padding: &str, left_corner: char, right_corner: char) -> String {
+    // Width of horizontal line: (columns * width) - 1 (for separators between columns)
+    let horizontal_boundary_width: usize = ((COL_WIDTH * num_cols) - 1).try_into().expect("Width calculation resulted in invalid usize");
     let horizontal_line: String = repeat_n("─", horizontal_boundary_width).collect::<String>();
 
-    let mut top_line: String = global_padding;
-    top_line.push('┌');
-    top_line.push_str(&horizontal_line);
-    top_line.push('┐');
-    top_line.clone()
+    let mut line: String = global_padding.to_string();
+    line.push(left_corner);
+    line.push_str(&horizontal_line);
+    line.push(right_corner);
+    line
 }
 
-fn create_bottom_line(num_cols: &i32, global_padding: String) -> String {
-    let horizontal_boundary_width: usize = ((COL_WIDTH * num_cols) - 1).try_into().unwrap();
-    let horizontal_line: String = repeat_n("─", horizontal_boundary_width).collect::<String>();
-
-    let mut bottom_line: String = global_padding;
-    bottom_line.push('└');
-    bottom_line.push_str(&horizontal_line);
-    bottom_line.push('┘');
-
-    bottom_line.clone()
-}
-
-fn get_padding(char_count: &i32) -> String {
-    let padding_amount: i32 = (COL_WIDTH - char_count) / 2;
-    let padding_space: String = repeat_n(" ", padding_amount as usize).collect::<String>();
-    padding_space
-}
-
-fn get_adjusted_padding(char_count: &i32) -> String {
-    let padding_amount: i32 = (COL_WIDTH - char_count) / 2;
-    let adjusted_padding_space: String =
-        repeat_n(" ", (padding_amount - 1) as usize).collect::<String>();
-    adjusted_padding_space
+fn get_paddings(char_count: i32, adjust_left: bool) -> (String, String) {
+    let base_padding = (COL_WIDTH - char_count) / 2;
+    let left_padding = repeat_n(" ", if adjust_left { base_padding - 1 } else { base_padding } as usize).collect::<String>();
+    let right_padding = repeat_n(" ", base_padding as usize).collect::<String>();
+    (left_padding, right_padding)
 }
 
 fn get_global_left_padding(col_len: &i32, num_cols: &i32) -> String {
-    let full_box_width: i32 = (*num_cols * COL_WIDTH) - MAX_NUM_COLS + 1;
+    // Full width of the box: (columns * width) - columns (for separators) + 1 (for border)
+    let full_box_width: i32 = (*num_cols * COL_WIDTH) - *num_cols + 1;
     let padding_amount: i32 = (*col_len - full_box_width) / 2;
     let padding_space: String = repeat_n(" ", padding_amount as usize).collect::<String>();
     padding_space
