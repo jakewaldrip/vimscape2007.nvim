@@ -261,10 +261,11 @@ mod tests {
         assert!(lexer.next_token().is_none());
     }
 
-    // #[test]
-    // fn no_input_as_none() {
-    //     const TEST_INPUT: &str = "";
-    // }
+    #[test]
+    fn no_input_as_none() {
+        let mut lexer = Lexer::new("");
+        assert!(lexer.next_token().is_none());
+    }
     //
     // #[test]
     // fn basic_vertical_movements() {
