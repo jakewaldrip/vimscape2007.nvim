@@ -24,6 +24,70 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    /// Try to parse a control sequence like `<C-X>`.
+    /// Returns Some(char) with the control character (e.g., 'U', 'D', 'F', etc.) if valid.
+    /// Returns None if not a valid control sequence.
+    /// The caller has already consumed the initial '<'.
+    fn try_parse_control_sequence(&mut self) -> Option<char> {
+        // We need to peek ahead to check for C-X> pattern
+        // Expected: C-X> where X is a single character
+
+        // Check for 'C'
+        if self.input.peek() != Some(&'C') {
+            return None;
+        }
+        self.input.next(); // consume 'C'
+
+        // Check for '-'
+        if self.input.peek() != Some(&'-') {
+            return None;
+        }
+        self.input.next(); // consume '-'
+
+        // Get the control character
+        let ctrl_char = self.input.next()?;
+
+        // Check for closing '>'
+        if self.input.peek() != Some(&'>') {
+            return None;
+        }
+        self.input.next(); // consume '>'
+
+        Some(ctrl_char)
+    }
+
+    /// Handle a control sequence and return the appropriate token.
+    /// `count` is the numeric prefix (default 1).
+    fn handle_control_sequence(&mut self, ctrl_char: char, count: u32) -> Option<Token> {
+        match ctrl_char {
+            // <C-U>, <C-D> -> MoveVerticalChunk(n)
+            'U' | 'D' => Some(Token::MoveVerticalChunk(i32::try_from(count).unwrap())),
+
+            // <C-F>, <C-B> -> JumpToVertical
+            'F' | 'B' => Some(Token::JumpToVertical),
+
+            // <C-E>, <C-Y> -> CameraMovement
+            'E' | 'Y' => Some(Token::CameraMovement),
+
+            // <C-R> -> UndoRedo
+            'R' => Some(Token::UndoRedo),
+
+            // <C-H>, <C-J>, <C-K>, <C-L> -> WindowManagement
+            'H' | 'J' | 'K' | 'L' => Some(Token::WindowManagement),
+
+            // <C-W> -> WindowManagement (consumes next character)
+            'W' => {
+                // Consume the next character as part of the window command
+                // e.g., <C-W>s, <C-W>v, etc.
+                let _ = self.input.next();
+                Some(Token::WindowManagement)
+            }
+
+            // Unrecognized control sequence
+            _ => Some(Token::Unhandled(format!("<C-{}>", ctrl_char))),
+        }
+    }
+
     fn accumulate_digit(&mut self, digit: char) -> u32 {
         self.accumulated_string.push(digit);
 
@@ -96,6 +160,42 @@ impl<'a> Lexer<'a> {
                                 self.input.next();
                                 Some(Token::JumpToLineNumber(accumulated))
                             }
+                            'g' => {
+                                self.input.next(); // consume 'g'
+                                                   // g-prefix commands with numeric prefix: gj, gk, gg, gJ
+                                match self.input.next() {
+                                    Some('j') | Some('k') => Some(Token::MoveVerticalBasic(
+                                        i32::try_from(count).unwrap(),
+                                    )),
+                                    Some('g') => Some(Token::JumpToLineNumber(accumulated)),
+                                    Some('J') => Some(Token::TextManipulationBasic(
+                                        i32::try_from(count).unwrap(),
+                                    )),
+                                    Some(ch) => Some(Token::Unhandled(format!("g{}", ch))),
+                                    None => Some(Token::Unhandled("g".into())),
+                                }
+                            }
+                            'z' => {
+                                self.input.next(); // consume 'z'
+                                                   // z-prefix commands (no numeric prefix support per spec)
+                                match self.input.next() {
+                                    Some('z') | Some('t') | Some('b') => {
+                                        Some(Token::CameraMovement)
+                                    }
+                                    Some(ch) => Some(Token::Unhandled(format!("z{}", ch))),
+                                    None => Some(Token::Unhandled("z".into())),
+                                }
+                            }
+                            '<' => {
+                                self.input.next(); // consume '<'
+                                if let Some(ctrl_char) = self.try_parse_control_sequence() {
+                                    self.handle_control_sequence(ctrl_char, count)
+                                } else {
+                                    // Not a valid control sequence, return accumulated as unhandled
+                                    // and let '<' be processed next time
+                                    Some(Token::Unhandled(accumulated))
+                                }
+                            }
                             _ => {
                                 // Not a command we handle with counts
                                 Some(Token::Unhandled(accumulated))
@@ -132,6 +232,32 @@ impl<'a> Lexer<'a> {
                     'x' => Some(Token::TextManipulationBasic(1)),
                     'J' => Some(Token::TextManipulationBasic(1)),
                     'G' => Some(Token::JumpToLineNumber(String::new())),
+                    'g' => {
+                        // g-prefix commands: gj, gk, gg, gJ
+                        match self.input.next() {
+                            Some('j') | Some('k') => Some(Token::MoveVerticalBasic(1)),
+                            Some('g') => Some(Token::JumpToLineNumber(String::new())),
+                            Some('J') => Some(Token::TextManipulationBasic(1)),
+                            Some(ch) => Some(Token::Unhandled(format!("g{}", ch))),
+                            None => Some(Token::Unhandled("g".into())),
+                        }
+                    }
+                    'z' => {
+                        // z-prefix commands: zz, zt, zb
+                        match self.input.next() {
+                            Some('z') | Some('t') | Some('b') => Some(Token::CameraMovement),
+                            Some(ch) => Some(Token::Unhandled(format!("z{}", ch))),
+                            None => Some(Token::Unhandled("z".into())),
+                        }
+                    }
+                    '<' => {
+                        // Try to parse control sequence
+                        if let Some(ctrl_char) = self.try_parse_control_sequence() {
+                            self.handle_control_sequence(ctrl_char, 1)
+                        } else {
+                            Some(Token::Unhandled("<".into()))
+                        }
+                    }
                     _ => Some(Token::Unhandled(ch.into())),
                 }
             }
@@ -373,6 +499,130 @@ mod tests {
         let mut lexer = Lexer::new("G10G");
         assert!(matches!(lexer.next_token(), Some(Token::JumpToLineNumber(ref s)) if s == ""));
         assert!(matches!(lexer.next_token(), Some(Token::JumpToLineNumber(ref s)) if s == "10"));
+    }
+
+    // Phase 2 test cases
+    #[test]
+    fn test_control_vertical_chunk() {
+        let mut lexer = Lexer::new("<C-U><C-D>5<C-U>");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::MoveVerticalChunk(1))
+        ));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::MoveVerticalChunk(1))
+        ));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::MoveVerticalChunk(5))
+        ));
+    }
+
+    #[test]
+    fn test_control_jump_vertical() {
+        let mut lexer = Lexer::new("<C-F><C-B>");
+        assert!(matches!(lexer.next_token(), Some(Token::JumpToVertical)));
+        assert!(matches!(lexer.next_token(), Some(Token::JumpToVertical)));
+    }
+
+    #[test]
+    fn test_control_camera() {
+        let mut lexer = Lexer::new("<C-E><C-Y>");
+        assert!(matches!(lexer.next_token(), Some(Token::CameraMovement)));
+        assert!(matches!(lexer.next_token(), Some(Token::CameraMovement)));
+    }
+
+    #[test]
+    fn test_control_undo_redo() {
+        let mut lexer = Lexer::new("<C-R>");
+        assert!(matches!(lexer.next_token(), Some(Token::UndoRedo)));
+    }
+
+    #[test]
+    fn test_control_window_management() {
+        let mut lexer = Lexer::new("<C-W>s<C-W>v<C-H><C-J><C-K><C-L>");
+        for _ in 0..6 {
+            assert!(matches!(lexer.next_token(), Some(Token::WindowManagement)));
+        }
+    }
+
+    #[test]
+    fn test_invalid_control_sequence() {
+        let mut lexer = Lexer::new("<C-X>");
+        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "<C-X>"));
+    }
+
+    #[test]
+    fn test_incomplete_control_sequence() {
+        let mut lexer = Lexer::new("<C-");
+        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "<"));
+    }
+
+    // Phase 3 test cases
+    #[test]
+    fn test_g_vertical_movement() {
+        let mut lexer = Lexer::new("gj5gk");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::MoveVerticalBasic(1))
+        ));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::MoveVerticalBasic(5))
+        ));
+    }
+
+    #[test]
+    fn test_gg_jump() {
+        let mut lexer = Lexer::new("gg10gg");
+        assert!(matches!(lexer.next_token(), Some(Token::JumpToLineNumber(ref s)) if s == ""));
+        assert!(matches!(lexer.next_token(), Some(Token::JumpToLineNumber(ref s)) if s == "10"));
+    }
+
+    #[test]
+    fn test_gj_text_manipulation() {
+        let mut lexer = Lexer::new("gJ3gJ");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationBasic(1))
+        ));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationBasic(3))
+        ));
+    }
+
+    #[test]
+    fn test_z_camera_movement() {
+        let mut lexer = Lexer::new("zzztzb");
+        assert!(matches!(lexer.next_token(), Some(Token::CameraMovement)));
+        assert!(matches!(lexer.next_token(), Some(Token::CameraMovement)));
+        assert!(matches!(lexer.next_token(), Some(Token::CameraMovement)));
+    }
+
+    #[test]
+    fn test_unrecognized_g_prefix() {
+        let mut lexer = Lexer::new("gx");
+        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "gx"));
+    }
+
+    #[test]
+    fn test_unrecognized_z_prefix() {
+        let mut lexer = Lexer::new("zx");
+        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "zx"));
+    }
+
+    #[test]
+    fn test_incomplete_g() {
+        let mut lexer = Lexer::new("g");
+        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "g"));
+    }
+
+    #[test]
+    fn test_incomplete_z() {
+        let mut lexer = Lexer::new("z");
+        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "z"));
     }
 
     //
