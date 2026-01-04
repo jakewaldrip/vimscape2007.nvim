@@ -328,12 +328,12 @@ fn test_unrecognized_g_prefix() {
 
 ### Tasks
 
-1. **Add `f`, `F`, `t`, `T` → `JumpToHorizontal`**
+- [x] 1. **Add `f`, `F`, `t`, `T` → `JumpToHorizontal`**
    - Each consumes the next character as the target
    - Example: `fa` → `JumpToHorizontal` (jump to 'a')
    - If no character follows, emit `Unhandled`
 
-2. **Add `r` → `TextManipulationBasic(n)`**
+- [x] 2. **Add `r` → `TextManipulationBasic(n)`**
    - Consumes the next character as the replacement
    - Supports numeric prefix: `3ra` replaces 3 chars with 'a'
    - Example: `ra` → `TextManipulationBasic(1)`, `5rx` → `TextManipulationBasic(5)`
