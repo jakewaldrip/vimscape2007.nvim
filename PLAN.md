@@ -636,12 +636,12 @@ fn test_command_with_space() {
 
 ### Tasks
 
-1. **Add `R` → `TextManipulationAdvanced`**
+- [x] 1. **Add `R` → `TextManipulationAdvanced`**
    - `R` enters replace mode
    - Accumulate characters until `<Esc>`
    - Example: `Rtext<Esc>` → `TextManipulationAdvanced`
 
-2. **Add `g~`, `gu`, `gU` + motion → `TextManipulationAdvanced`**
+- [x] 2. **Add `g~`, `gu`, `gU` + motion → `TextManipulationAdvanced`**
    - These are operators like `d`, `y`, `c`
    - Take a motion argument
    - Example: `guw` → `TextManipulationAdvanced`, `gU3w` → `TextManipulationAdvanced`

@@ -16,6 +16,8 @@ enum State {
     OperatorPending { operator: Operator, count: u32 },
     CommandMode { content: String },
     SearchMode { content: String },
+    ReplaceMode { content: String },
+    CaseOperatorPending { operator: String, count: u32 }, // "g~", "gu", "gU"
 }
 
 pub struct Lexer<'a> {
@@ -440,22 +442,152 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    /// Handle case operator motion (g~, gu, gU + motion)
+    fn handle_case_operator_motion(&mut self, operator: &str, count: u32) -> Option<Token> {
+        let ch = match self.input.next() {
+            Some(c) => c,
+            None => {
+                // End of input - incomplete case operator
+                return Some(Token::Unhandled(operator.to_string()));
+            }
+        };
+
+        // Handle motion count (e.g., gu3w)
+        if ch.is_ascii_digit() && ch != '0' {
+            let mut motion_count = ch.to_digit(10).unwrap();
+            while let Some(&next_ch) = self.input.peek() {
+                if next_ch.is_ascii_digit() {
+                    self.input.next();
+                    motion_count = motion_count
+                        .saturating_mul(10)
+                        .saturating_add(next_ch.to_digit(10).unwrap());
+                    if motion_count > 999 {
+                        motion_count = 999;
+                    }
+                } else {
+                    break;
+                }
+            }
+            // Now get the actual motion
+            return self
+                .handle_case_operator_with_motion(operator, count.saturating_mul(motion_count));
+        }
+
+        // Handle regular motions
+        self.handle_case_operator_char_motion(operator, count, ch)
+    }
+
+    /// Handle case operator with a motion character
+    fn handle_case_operator_char_motion(
+        &mut self,
+        operator: &str,
+        _count: u32,
+        ch: char,
+    ) -> Option<Token> {
+        match ch {
+            // Word/chunk motions
+            'w' | 'W' | 'e' | 'E' | 'b' | 'B' => Some(Token::TextManipulationAdvanced),
+            // Line position motions
+            '$' | '^' | '0' => Some(Token::TextManipulationAdvanced),
+            // Basic movements
+            'j' | 'k' | 'h' | 'l' => Some(Token::TextManipulationAdvanced),
+            // Find char motions (consume target char)
+            'f' | 'F' | 't' | 'T' => {
+                // Consume the target character
+                if self.input.next().is_some() {
+                    Some(Token::TextManipulationAdvanced)
+                } else {
+                    // Incomplete find motion
+                    Some(Token::Unhandled(format!("{}{}", operator, ch)))
+                }
+            }
+            // g-prefix motions (gg, gj, gk, g$, etc.)
+            'g' => {
+                if let Some(&next_ch) = self.input.peek() {
+                    self.input.next();
+                    match next_ch {
+                        'g' | 'j' | 'k' | '$' | '^' | '0' | 'e' | 'E' => {
+                            Some(Token::TextManipulationAdvanced)
+                        }
+                        _ => Some(Token::Unhandled(format!("{}g{}", operator, next_ch))),
+                    }
+                } else {
+                    Some(Token::Unhandled(format!("{}g", operator)))
+                }
+            }
+            // Text objects (i/a + object)
+            'i' | 'a' => {
+                if let Some(&obj_ch) = self.input.peek() {
+                    if Self::is_text_object_char(obj_ch) {
+                        self.input.next(); // consume the object char
+                        return Some(Token::TextManipulationAdvanced);
+                    }
+                }
+                Some(Token::Unhandled(format!("{}{}", operator, ch)))
+            }
+            // Unrecognized motion
+            _ => Some(Token::Unhandled(format!("{}{}", operator, ch))),
+        }
+    }
+
+    /// Handle case operator with accumulated motion count
+    fn handle_case_operator_with_motion(&mut self, operator: &str, count: u32) -> Option<Token> {
+        if let Some(ch) = self.input.next() {
+            self.handle_case_operator_char_motion(operator, count, ch)
+        } else {
+            Some(Token::Unhandled(operator.to_string()))
+        }
+    }
+
     pub fn next_token(&mut self) -> Option<Token> {
         // Handle accumulated state from previous calls
-        // First, check if we're in command or search mode and extract content
+        // First, check if we're in command, search, or replace mode and extract content
+        // 0 = CommandMode, 1 = SearchMode, 2 = ReplaceMode
         let mode_content = match &mut self.state {
-            State::CommandMode { content } => Some((true, std::mem::take(content))),
-            State::SearchMode { content } => Some((false, std::mem::take(content))),
+            State::CommandMode { content } => Some((0, std::mem::take(content))),
+            State::SearchMode { content } => Some((1, std::mem::take(content))),
+            State::ReplaceMode { content } => Some((2, std::mem::take(content))),
             _ => None,
         };
 
-        if let Some((is_command_mode, mut content)) = mode_content {
-            // Continue accumulating content until terminator
+        if let Some((mode_type, mut content)) = mode_content {
+            // mode_type: 0 = CommandMode, 1 = SearchMode, 2 = ReplaceMode
+
+            // ReplaceMode only terminates on <Esc>
+            if mode_type == 2 {
+                loop {
+                    // Check for <Esc> terminator
+                    if let Some(&'<') = self.input.peek() {
+                        let mut peek_iter = self.input.clone();
+                        peek_iter.next(); // skip '<'
+                        let chars: String = peek_iter.take(4).collect();
+                        if chars == "Esc>" {
+                            // Consume <Esc> from real iterator
+                            for _ in 0..5 {
+                                self.input.next();
+                            }
+                            self.state = State::None;
+                            return Some(Token::TextManipulationAdvanced);
+                        }
+                    }
+
+                    match self.input.next() {
+                        Some(ch) => content.push(ch),
+                        None => {
+                            // End of input without <Esc> - treat as incomplete
+                            self.state = State::None;
+                            return Some(Token::TextManipulationAdvanced);
+                        }
+                    }
+                }
+            }
+
+            // Continue accumulating content until terminator (CommandMode or SearchMode)
             loop {
                 // Check for terminator first
                 if let Some(completed) = self.check_command_terminator() {
                     self.state = State::None;
-                    if is_command_mode {
+                    if mode_type == 0 {
                         return Some(self.classify_command(&content, completed));
                     } else {
                         return Some(Token::CommandSearch(completed));
@@ -487,7 +619,7 @@ impl<'a> Lexer<'a> {
                     None => {
                         // End of input without terminator - treat as incomplete
                         self.state = State::None;
-                        if is_command_mode {
+                        if mode_type == 0 {
                             return Some(Token::Command(false));
                         } else {
                             return Some(Token::CommandSearch(false));
@@ -500,6 +632,17 @@ impl<'a> Lexer<'a> {
         match self.state {
             State::CommandMode { .. } | State::SearchMode { .. } => {
                 unreachable!("Already handled above")
+            }
+            State::ReplaceMode { .. } => {
+                unreachable!("Already handled above")
+            }
+            State::CaseOperatorPending {
+                ref operator,
+                count,
+            } => {
+                let op = operator.clone();
+                self.state = State::None;
+                self.handle_case_operator_motion(&op, count)
             }
             State::OperatorPending { operator, count } => {
                 self.state = State::None;
@@ -545,7 +688,7 @@ impl<'a> Lexer<'a> {
                             }
                             'g' => {
                                 self.input.next(); // consume 'g'
-                                                   // g-prefix commands with numeric prefix: gj, gk, gg, gJ
+                                                   // g-prefix commands with numeric prefix: gj, gk, gg, gJ, g~, gu, gU
                                 match self.input.next() {
                                     Some('j') | Some('k') => Some(Token::MoveVerticalBasic(
                                         i32::try_from(count).unwrap(),
@@ -554,6 +697,30 @@ impl<'a> Lexer<'a> {
                                     Some('J') => Some(Token::TextManipulationBasic(
                                         i32::try_from(count).unwrap(),
                                     )),
+                                    Some('~') => {
+                                        // g~ case toggle operator with count
+                                        self.state = State::CaseOperatorPending {
+                                            operator: "g~".to_string(),
+                                            count,
+                                        };
+                                        self.next_token()
+                                    }
+                                    Some('u') => {
+                                        // gu lowercase operator with count
+                                        self.state = State::CaseOperatorPending {
+                                            operator: "gu".to_string(),
+                                            count,
+                                        };
+                                        self.next_token()
+                                    }
+                                    Some('U') => {
+                                        // gU uppercase operator with count
+                                        self.state = State::CaseOperatorPending {
+                                            operator: "gU".to_string(),
+                                            count,
+                                        };
+                                        self.next_token()
+                                    }
                                     Some(ch) => Some(Token::Unhandled(format!("g{}", ch))),
                                     None => Some(Token::Unhandled("g".into())),
                                 }
@@ -660,14 +827,45 @@ impl<'a> Lexer<'a> {
                     'J' => Some(Token::TextManipulationBasic(1)),
                     'G' => Some(Token::JumpToLineNumber(String::new())),
                     'g' => {
-                        // g-prefix commands: gj, gk, gg, gJ
+                        // g-prefix commands: gj, gk, gg, gJ, g~, gu, gU
                         match self.input.next() {
                             Some('j') | Some('k') => Some(Token::MoveVerticalBasic(1)),
                             Some('g') => Some(Token::JumpToLineNumber(String::new())),
                             Some('J') => Some(Token::TextManipulationBasic(1)),
+                            Some('~') => {
+                                // g~ case toggle operator - enter case operator pending state
+                                self.state = State::CaseOperatorPending {
+                                    operator: "g~".to_string(),
+                                    count: 1,
+                                };
+                                self.next_token()
+                            }
+                            Some('u') => {
+                                // gu lowercase operator - enter case operator pending state
+                                self.state = State::CaseOperatorPending {
+                                    operator: "gu".to_string(),
+                                    count: 1,
+                                };
+                                self.next_token()
+                            }
+                            Some('U') => {
+                                // gU uppercase operator - enter case operator pending state
+                                self.state = State::CaseOperatorPending {
+                                    operator: "gU".to_string(),
+                                    count: 1,
+                                };
+                                self.next_token()
+                            }
                             Some(ch) => Some(Token::Unhandled(format!("g{}", ch))),
                             None => Some(Token::Unhandled("g".into())),
                         }
+                    }
+                    'R' => {
+                        // Enter replace mode - accumulate until <Esc>
+                        self.state = State::ReplaceMode {
+                            content: String::new(),
+                        };
+                        self.next_token()
                     }
                     'z' => {
                         // z-prefix commands: zz, zt, zb
@@ -1346,6 +1544,93 @@ mod tests {
     fn test_command_with_space() {
         let mut lexer = Lexer::new(":Vimscape|space|toggle|enter|");
         assert!(matches!(lexer.next_token(), Some(Token::Command(true))));
+    }
+
+    // Phase 7 test cases - Replace Mode and Advanced Text Manipulation
+    #[test]
+    fn test_replace_mode() {
+        let mut lexer = Lexer::new("Rtest<Esc>");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+    }
+
+    #[test]
+    fn test_replace_mode_empty() {
+        let mut lexer = Lexer::new("R<Esc>");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+    }
+
+    #[test]
+    fn test_case_toggle() {
+        let mut lexer = Lexer::new("g~w");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+    }
+
+    #[test]
+    fn test_case_lower() {
+        let mut lexer = Lexer::new("guw");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+    }
+
+    #[test]
+    fn test_case_upper() {
+        let mut lexer = Lexer::new("gUw");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+    }
+
+    #[test]
+    fn test_case_with_count() {
+        let mut lexer = Lexer::new("gu3w");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+    }
+
+    #[test]
+    fn test_case_with_prefix_count() {
+        let mut lexer = Lexer::new("3guw");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+    }
+
+    #[test]
+    fn test_case_operators_various_motions() {
+        let mut lexer = Lexer::new("g~$guegUb");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+    }
+
+    #[test]
+    fn test_incomplete_case_operator() {
+        let mut lexer = Lexer::new("gu");
+        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "gu"));
     }
 
     //
