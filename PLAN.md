@@ -408,19 +408,19 @@ Operators (`d`, `y`, `c`) combine with motions:
 
 ### Tasks
 
-1. **Add `d` operator handling → `DeleteText(n)`**
+- [x] 1. **Add `d` operator handling → `DeleteText(n)`**
    - `dd` → `DeleteText(1)` (double-d means delete line)
    - `d` + motion → `DeleteText(n)` where n is motion count
    - `d$`, `d^`, `d0` → `DeleteText(1)`
    - `dw`, `dW`, `de`, `dE`, `db`, `dB` → `DeleteText(n)`
    - Numeric prefix applies: `3dd` → `DeleteText(3)`, `d3w` → `DeleteText(3)`
 
-2. **Add `y` operator handling → `YankPaste`**
+- [x] 2. **Add `y` operator handling → `YankPaste`**
    - `yy` → `YankPaste` (yank line)
    - `y` + motion → `YankPaste`
    - `y$`, `yw`, `yiw`, `yaw` → `YankPaste`
 
-3. **Add `c` operator handling → `TextManipulationAdvanced`**
+- [x] 3. **Add `c` operator handling → `TextManipulationAdvanced`**
    - `cc` → `TextManipulationAdvanced` (change line)
    - `c` + motion → `TextManipulationAdvanced`
    - `c$`, `cw`, `ciw`, `caw`, `ci)`, `ca)` → `TextManipulationAdvanced`

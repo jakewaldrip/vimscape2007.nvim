@@ -2,10 +2,18 @@ use std::{iter::Peekable, str::Chars};
 
 use crate::token::Token;
 
+#[derive(Debug, Clone, Copy)]
+enum Operator {
+    Delete, // d
+    Yank,   // y
+    Change, // c
+}
+
 #[derive(Debug)]
 enum State {
     None,
     AccumulatingCount(u32),
+    OperatorPending { operator: Operator, count: u32 },
 }
 
 pub struct Lexer<'a> {
@@ -119,9 +127,211 @@ impl<'a> Lexer<'a> {
         count
     }
 
+    /// Check if a character is a valid motion for operators
+    fn is_motion_char(ch: char) -> bool {
+        matches!(
+            ch,
+            'w' | 'W' | 'e' | 'E' | 'b' | 'B' | // word motions
+            'j' | 'k' | 'h' | 'l' | // basic movements
+            '$' | '^' | '0' | // line position
+            'f' | 'F' | 't' | 'T' | // find char
+            'g' | // g-prefix motions (gg, gj, gk, etc.)
+            'i' | 'a' // text objects
+        )
+    }
+
+    /// Check if a character is a valid text object specifier
+    fn is_text_object_char(ch: char) -> bool {
+        matches!(
+            ch,
+            'w' | 'W' | // word
+            '(' | ')' | 'b' | // parentheses
+            '{' | '}' | 'B' | // braces
+            '[' | ']' | // brackets
+            '<' | '>' | // angle brackets
+            '\'' | '"' | '`' | // quotes
+            't' | // tag
+            's' | 'p' // sentence, paragraph
+        )
+    }
+
+    /// Handle operator pending state - process motion after d, y, or c
+    fn handle_operator_motion(&mut self, operator: Operator, count: u32) -> Option<Token> {
+        let ch = match self.input.next() {
+            Some(c) => c,
+            None => {
+                // End of input - incomplete operator
+                let op_char = match operator {
+                    Operator::Delete => 'd',
+                    Operator::Yank => 'y',
+                    Operator::Change => 'c',
+                };
+                return Some(Token::Unhandled(op_char.to_string()));
+            }
+        };
+
+        // Handle doubled operator (dd, yy, cc) - line operation
+        let is_doubled = match operator {
+            Operator::Delete => ch == 'd',
+            Operator::Yank => ch == 'y',
+            Operator::Change => ch == 'c',
+        };
+
+        if is_doubled {
+            return match operator {
+                Operator::Delete => Some(Token::DeleteText(i32::try_from(count).unwrap())),
+                Operator::Yank => Some(Token::YankPaste),
+                Operator::Change => Some(Token::TextManipulationAdvanced),
+            };
+        }
+
+        // Handle motion count (e.g., d3w)
+        if ch.is_ascii_digit() && ch != '0' {
+            let mut motion_count = ch.to_digit(10).unwrap();
+            while let Some(&next_ch) = self.input.peek() {
+                if next_ch.is_ascii_digit() {
+                    self.input.next();
+                    motion_count = motion_count
+                        .saturating_mul(10)
+                        .saturating_add(next_ch.to_digit(10).unwrap());
+                    if motion_count > 999 {
+                        motion_count = 999;
+                    }
+                } else {
+                    break;
+                }
+            }
+            // Now get the actual motion
+            let total_count = count.saturating_mul(motion_count);
+            return self.handle_operator_with_motion(operator, total_count);
+        }
+
+        // Handle text objects (i/a + object)
+        if ch == 'i' || ch == 'a' {
+            if let Some(&obj_ch) = self.input.peek() {
+                if Self::is_text_object_char(obj_ch) {
+                    self.input.next(); // consume the object char
+                    return match operator {
+                        Operator::Delete => Some(Token::DeleteText(i32::try_from(count).unwrap())),
+                        Operator::Yank => Some(Token::YankPaste),
+                        Operator::Change => Some(Token::TextManipulationAdvanced),
+                    };
+                }
+            }
+        }
+
+        // Handle regular motions
+        self.handle_operator_char_motion(operator, count, ch)
+    }
+
+    /// Handle operator with a motion character
+    fn handle_operator_char_motion(
+        &mut self,
+        operator: Operator,
+        count: u32,
+        ch: char,
+    ) -> Option<Token> {
+        match ch {
+            // Word/chunk motions
+            'w' | 'W' | 'e' | 'E' | 'b' | 'B' => match operator {
+                Operator::Delete => Some(Token::DeleteText(i32::try_from(count).unwrap())),
+                Operator::Yank => Some(Token::YankPaste),
+                Operator::Change => Some(Token::TextManipulationAdvanced),
+            },
+            // Line position motions
+            '$' | '^' | '0' => match operator {
+                Operator::Delete => Some(Token::DeleteText(i32::try_from(count).unwrap())),
+                Operator::Yank => Some(Token::YankPaste),
+                Operator::Change => Some(Token::TextManipulationAdvanced),
+            },
+            // Basic movements
+            'j' | 'k' | 'h' | 'l' => match operator {
+                Operator::Delete => Some(Token::DeleteText(i32::try_from(count).unwrap())),
+                Operator::Yank => Some(Token::YankPaste),
+                Operator::Change => Some(Token::TextManipulationAdvanced),
+            },
+            // Find char motions (consume target char)
+            'f' | 'F' | 't' | 'T' => {
+                // Consume the target character
+                if self.input.next().is_some() {
+                    match operator {
+                        Operator::Delete => Some(Token::DeleteText(i32::try_from(count).unwrap())),
+                        Operator::Yank => Some(Token::YankPaste),
+                        Operator::Change => Some(Token::TextManipulationAdvanced),
+                    }
+                } else {
+                    // Incomplete find motion
+                    let op_char = match operator {
+                        Operator::Delete => 'd',
+                        Operator::Yank => 'y',
+                        Operator::Change => 'c',
+                    };
+                    Some(Token::Unhandled(format!("{}{}", op_char, ch)))
+                }
+            }
+            // g-prefix motions (gg, gj, gk, g$, etc.)
+            'g' => {
+                if let Some(&next_ch) = self.input.peek() {
+                    self.input.next();
+                    match next_ch {
+                        'g' | 'j' | 'k' | '$' | '^' | '0' | 'e' | 'E' => match operator {
+                            Operator::Delete => {
+                                Some(Token::DeleteText(i32::try_from(count).unwrap()))
+                            }
+                            Operator::Yank => Some(Token::YankPaste),
+                            Operator::Change => Some(Token::TextManipulationAdvanced),
+                        },
+                        _ => {
+                            let op_char = match operator {
+                                Operator::Delete => 'd',
+                                Operator::Yank => 'y',
+                                Operator::Change => 'c',
+                            };
+                            Some(Token::Unhandled(format!("{}g{}", op_char, next_ch)))
+                        }
+                    }
+                } else {
+                    let op_char = match operator {
+                        Operator::Delete => 'd',
+                        Operator::Yank => 'y',
+                        Operator::Change => 'c',
+                    };
+                    Some(Token::Unhandled(format!("{}g", op_char)))
+                }
+            }
+            // Unrecognized motion
+            _ => {
+                let op_char = match operator {
+                    Operator::Delete => 'd',
+                    Operator::Yank => 'y',
+                    Operator::Change => 'c',
+                };
+                Some(Token::Unhandled(format!("{}{}", op_char, ch)))
+            }
+        }
+    }
+
+    /// Handle operator with accumulated motion count
+    fn handle_operator_with_motion(&mut self, operator: Operator, count: u32) -> Option<Token> {
+        if let Some(ch) = self.input.next() {
+            self.handle_operator_char_motion(operator, count, ch)
+        } else {
+            let op_char = match operator {
+                Operator::Delete => 'd',
+                Operator::Yank => 'y',
+                Operator::Change => 'c',
+            };
+            Some(Token::Unhandled(op_char.to_string()))
+        }
+    }
+
     pub fn next_token(&mut self) -> Option<Token> {
         // Handle accumulated state from previous calls
         match self.state {
+            State::OperatorPending { operator, count } => {
+                self.state = State::None;
+                self.handle_operator_motion(operator, count)
+            }
             State::AccumulatingCount(count) => {
                 if let Some(&ch) = self.input.peek() {
                     if ch.is_ascii_digit() {
@@ -206,6 +416,30 @@ impl<'a> Lexer<'a> {
                                     Some(Token::Unhandled("r".into()))
                                 }
                             }
+                            'd' => {
+                                self.input.next(); // consume 'd'
+                                self.state = State::OperatorPending {
+                                    operator: Operator::Delete,
+                                    count,
+                                };
+                                self.next_token()
+                            }
+                            'y' => {
+                                self.input.next(); // consume 'y'
+                                self.state = State::OperatorPending {
+                                    operator: Operator::Yank,
+                                    count,
+                                };
+                                self.next_token()
+                            }
+                            'c' => {
+                                self.input.next(); // consume 'c'
+                                self.state = State::OperatorPending {
+                                    operator: Operator::Change,
+                                    count,
+                                };
+                                self.next_token()
+                            }
                             '<' => {
                                 self.input.next(); // consume '<'
                                 if let Some(ctrl_char) = self.try_parse_control_sequence() {
@@ -285,6 +519,46 @@ impl<'a> Lexer<'a> {
                         } else {
                             Some(Token::Unhandled("r".into()))
                         }
+                    }
+                    'd' => {
+                        // Delete operator - enter operator pending state
+                        self.state = State::OperatorPending {
+                            operator: Operator::Delete,
+                            count: 1,
+                        };
+                        self.next_token()
+                    }
+                    'y' => {
+                        // Yank operator - enter operator pending state
+                        self.state = State::OperatorPending {
+                            operator: Operator::Yank,
+                            count: 1,
+                        };
+                        self.next_token()
+                    }
+                    'c' => {
+                        // Change operator - enter operator pending state
+                        self.state = State::OperatorPending {
+                            operator: Operator::Change,
+                            count: 1,
+                        };
+                        self.next_token()
+                    }
+                    's' => {
+                        // s is alias for cl (substitute character)
+                        Some(Token::TextManipulationAdvanced)
+                    }
+                    'S' => {
+                        // S is alias for cc (substitute line)
+                        Some(Token::TextManipulationAdvanced)
+                    }
+                    'C' => {
+                        // C is alias for c$ (change to end of line)
+                        Some(Token::TextManipulationAdvanced)
+                    }
+                    'Y' => {
+                        // Y is alias for y$ (yank to end of line)
+                        Some(Token::YankPaste)
                     }
                     '<' => {
                         // Try to parse control sequence
@@ -699,6 +973,131 @@ mod tests {
     fn test_replace_char_incomplete() {
         let mut lexer = Lexer::new("r");
         assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "r"));
+    }
+
+    // Phase 5 test cases - Operator-Pending Commands (d, y, c)
+    #[test]
+    fn test_delete_line() {
+        let mut lexer = Lexer::new("dd3dd");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(3))));
+    }
+
+    #[test]
+    fn test_delete_motion() {
+        let mut lexer = Lexer::new("dwdWd$d3w");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(3))));
+    }
+
+    #[test]
+    fn test_yank() {
+        let mut lexer = Lexer::new("yyywy$");
+        assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
+        assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
+        assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
+    }
+
+    #[test]
+    fn test_change() {
+        let mut lexer = Lexer::new("cccwc$");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+    }
+
+    #[test]
+    fn test_change_aliases() {
+        let mut lexer = Lexer::new("sSC");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+    }
+
+    #[test]
+    fn test_text_objects() {
+        let mut lexer = Lexer::new("ciwcawci)ca}");
+        for _ in 0..4 {
+            assert!(matches!(
+                lexer.next_token(),
+                Some(Token::TextManipulationAdvanced)
+            ));
+        }
+    }
+
+    #[test]
+    fn test_delete_text_objects() {
+        let mut lexer = Lexer::new("diwdawdi)da}");
+        for _ in 0..4 {
+            assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        }
+    }
+
+    #[test]
+    fn test_yank_text_objects() {
+        let mut lexer = Lexer::new("yiwyawyi)ya}");
+        for _ in 0..4 {
+            assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
+        }
+    }
+
+    #[test]
+    fn test_y_uppercase() {
+        let mut lexer = Lexer::new("Y");
+        assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
+    }
+
+    #[test]
+    fn test_incomplete_d() {
+        let mut lexer = Lexer::new("d");
+        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "d"));
+    }
+
+    #[test]
+    fn test_incomplete_y() {
+        let mut lexer = Lexer::new("y");
+        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "y"));
+    }
+
+    #[test]
+    fn test_incomplete_c() {
+        let mut lexer = Lexer::new("c");
+        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "c"));
+    }
+
+    #[test]
+    fn test_delete_with_find_motion() {
+        let mut lexer = Lexer::new("dfxdta");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+    }
+
+    #[test]
+    fn test_operator_with_g_motion() {
+        let mut lexer = Lexer::new("dggyggygg");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
+        assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
     }
 
     //
