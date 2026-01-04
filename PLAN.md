@@ -530,7 +530,7 @@ The Lua frontend sends:
 
 ### Tasks
 
-1. **Add pipe-delimited key parsing:**
+- [x] 1. **Add pipe-delimited key parsing:**
    ```rust
    fn try_parse_pipe_delimited(&mut self) -> Option<String> {
        // If current char is '|', try to parse |enter|, |tab|, etc.
@@ -539,12 +539,12 @@ The Lua frontend sends:
    }
    ```
 
-2. **Add `/` and `?` → `CommandSearch(bool)`**
+- [x] 2. **Add `/` and `?` → `CommandSearch(bool)`**
    - Accumulate until `|enter|` → `CommandSearch(true)`
    - Accumulate until `<Esc>` → `CommandSearch(false)`
    - Example: `/test|enter|` → `CommandSearch(true)`
 
-3. **Add `:` → Various tokens based on content**
+- [x] 3. **Add `:` → Various tokens based on content**
    - `:[digits]|enter|` → `JumpToLineNumber(digits)`
    - `:h` or `:help` → `HelpPage(bool)`
    - `:w` → `SaveFile(bool)`

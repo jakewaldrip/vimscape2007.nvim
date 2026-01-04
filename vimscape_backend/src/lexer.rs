@@ -14,6 +14,8 @@ enum State {
     None,
     AccumulatingCount(u32),
     OperatorPending { operator: Operator, count: u32 },
+    CommandMode { content: String },
+    SearchMode { content: String },
 }
 
 pub struct Lexer<'a> {
@@ -94,6 +96,119 @@ impl<'a> Lexer<'a> {
             // Unrecognized control sequence
             _ => Some(Token::Unhandled(format!("<C-{}>", ctrl_char))),
         }
+    }
+
+    /// Try to parse a pipe-delimited special key like `|enter|`, `|tab|`, etc.
+    /// Returns Some(key_name) if valid (e.g., "enter", "tab", "backspace", "space").
+    /// Returns None if not a valid pipe sequence.
+    /// The caller has already consumed the initial '|'.
+    fn try_parse_pipe_delimited(&mut self) -> Option<String> {
+        let mut key_name = String::new();
+
+        // Accumulate characters until we hit another '|' or end of input
+        loop {
+            match self.input.peek() {
+                Some(&'|') => {
+                    self.input.next(); // consume closing '|'
+                                       // Validate known pipe-delimited keys
+                    match key_name.as_str() {
+                        "enter" | "tab" | "backspace" | "space" => return Some(key_name),
+                        _ => return None, // Unknown pipe-delimited key
+                    }
+                }
+                Some(&ch) => {
+                    self.input.next();
+                    key_name.push(ch);
+                    // Limit length to prevent infinite accumulation
+                    if key_name.len() > 10 {
+                        return None;
+                    }
+                }
+                None => return None, // End of input without closing '|'
+            }
+        }
+    }
+
+    /// Check if we've reached a terminator for command/search mode.
+    /// Returns Some(true) for |enter| (completed), Some(false) for <Esc> (cancelled).
+    /// Returns None if current position is not a terminator.
+    fn check_command_terminator(&mut self) -> Option<bool> {
+        match self.input.peek() {
+            Some(&'|') => {
+                // Clone iterator to peek ahead without consuming
+                let mut peek_iter = self.input.clone();
+                peek_iter.next(); // skip '|'
+
+                // Check for "enter|"
+                let mut key_name = String::new();
+                loop {
+                    match peek_iter.next() {
+                        Some('|') => {
+                            if key_name == "enter" {
+                                // Consume the |enter| from the real iterator
+                                self.input.next(); // '|'
+                                for _ in 0..5 {
+                                    self.input.next(); // "enter"
+                                }
+                                self.input.next(); // '|'
+                                return Some(true);
+                            }
+                            return None;
+                        }
+                        Some(ch) => {
+                            key_name.push(ch);
+                            if key_name.len() > 10 {
+                                return None;
+                            }
+                        }
+                        None => return None,
+                    }
+                }
+            }
+            Some(&'<') => {
+                // Check for <Esc>
+                let mut peek_iter = self.input.clone();
+                peek_iter.next(); // skip '<'
+
+                let chars: String = peek_iter.take(4).collect();
+                if chars == "Esc>" {
+                    // Consume <Esc> from real iterator
+                    for _ in 0..5 {
+                        self.input.next();
+                    }
+                    return Some(false);
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+
+    /// Classify command content and return appropriate token.
+    fn classify_command(&self, content: &str, completed: bool) -> Token {
+        let trimmed = content.trim();
+
+        // Check for line number: all digits
+        if !trimmed.is_empty() && trimmed.chars().all(|c| c.is_ascii_digit()) {
+            return Token::JumpToLineNumber(trimmed.to_string());
+        }
+
+        // Check for help: starts with 'h' or 'help'
+        if trimmed == "h"
+            || trimmed.starts_with("h ")
+            || trimmed == "help"
+            || trimmed.starts_with("help ")
+        {
+            return Token::HelpPage(completed);
+        }
+
+        // Check for save: 'w' or 'w ' (write)
+        if trimmed == "w" || trimmed.starts_with("w ") || trimmed.starts_with("w!") {
+            return Token::SaveFile(completed);
+        }
+
+        // Generic command
+        Token::Command(completed)
     }
 
     fn accumulate_digit(&mut self, digit: char) -> u32 {
@@ -327,7 +442,65 @@ impl<'a> Lexer<'a> {
 
     pub fn next_token(&mut self) -> Option<Token> {
         // Handle accumulated state from previous calls
+        // First, check if we're in command or search mode and extract content
+        let mode_content = match &mut self.state {
+            State::CommandMode { content } => Some((true, std::mem::take(content))),
+            State::SearchMode { content } => Some((false, std::mem::take(content))),
+            _ => None,
+        };
+
+        if let Some((is_command_mode, mut content)) = mode_content {
+            // Continue accumulating content until terminator
+            loop {
+                // Check for terminator first
+                if let Some(completed) = self.check_command_terminator() {
+                    self.state = State::None;
+                    if is_command_mode {
+                        return Some(self.classify_command(&content, completed));
+                    } else {
+                        return Some(Token::CommandSearch(completed));
+                    }
+                }
+
+                // Handle pipe-delimited keys within command/search (like |space|)
+                if let Some(&'|') = self.input.peek() {
+                    self.input.next(); // consume '|'
+                    if let Some(key) = self.try_parse_pipe_delimited() {
+                        match key.as_str() {
+                            "space" => content.push(' '),
+                            "tab" => content.push('\t'),
+                            "backspace" => {
+                                content.pop();
+                            }
+                            _ => {} // "enter" should have been caught by check_command_terminator
+                        }
+                        continue;
+                    } else {
+                        // Not a valid pipe sequence, treat '|' as literal
+                        content.push('|');
+                        continue;
+                    }
+                }
+
+                match self.input.next() {
+                    Some(ch) => content.push(ch),
+                    None => {
+                        // End of input without terminator - treat as incomplete
+                        self.state = State::None;
+                        if is_command_mode {
+                            return Some(Token::Command(false));
+                        } else {
+                            return Some(Token::CommandSearch(false));
+                        }
+                    }
+                }
+            }
+        }
+
         match self.state {
+            State::CommandMode { .. } | State::SearchMode { .. } => {
+                unreachable!("Already handled above")
+            }
             State::OperatorPending { operator, count } => {
                 self.state = State::None;
                 self.handle_operator_motion(operator, count)
@@ -567,6 +740,20 @@ impl<'a> Lexer<'a> {
                         } else {
                             Some(Token::Unhandled("<".into()))
                         }
+                    }
+                    ':' => {
+                        // Enter command mode
+                        self.state = State::CommandMode {
+                            content: String::new(),
+                        };
+                        self.next_token()
+                    }
+                    '/' | '?' => {
+                        // Enter search mode
+                        self.state = State::SearchMode {
+                            content: String::new(),
+                        };
+                        self.next_token()
                     }
                     _ => Some(Token::Unhandled(ch.into())),
                 }
@@ -1098,6 +1285,67 @@ mod tests {
         assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
         assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
         assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
+    }
+
+    // Phase 6 test cases - Command Mode Sequences
+    #[test]
+    fn test_search_completed() {
+        let mut lexer = Lexer::new("/test|enter|");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::CommandSearch(true))
+        ));
+    }
+
+    #[test]
+    fn test_search_cancelled() {
+        let mut lexer = Lexer::new("/test<Esc>");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::CommandSearch(false))
+        ));
+    }
+
+    #[test]
+    fn test_search_backward() {
+        let mut lexer = Lexer::new("?pattern|enter|");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::CommandSearch(true))
+        ));
+    }
+
+    #[test]
+    fn test_command_line_number() {
+        let mut lexer = Lexer::new(":42|enter|");
+        assert!(matches!(lexer.next_token(), Some(Token::JumpToLineNumber(ref s)) if s == "42"));
+    }
+
+    #[test]
+    fn test_help_page() {
+        let mut lexer = Lexer::new(":h test|enter|:help topic<Esc>");
+        assert!(matches!(lexer.next_token(), Some(Token::HelpPage(true))));
+        assert!(matches!(lexer.next_token(), Some(Token::HelpPage(false))));
+    }
+
+    #[test]
+    fn test_save_file() {
+        let mut lexer = Lexer::new(":w|enter|:w<Esc>");
+        assert!(matches!(lexer.next_token(), Some(Token::SaveFile(true))));
+        assert!(matches!(lexer.next_token(), Some(Token::SaveFile(false))));
+    }
+
+    #[test]
+    fn test_generic_command() {
+        let mut lexer = Lexer::new(":Vimscape|enter|:q<Esc>");
+        assert!(matches!(lexer.next_token(), Some(Token::Command(true))));
+        assert!(matches!(lexer.next_token(), Some(Token::Command(false))));
+    }
+
+    #[test]
+    fn test_command_with_space() {
+        let mut lexer = Lexer::new(":Vimscape|space|toggle|enter|");
+        assert!(matches!(lexer.next_token(), Some(Token::Command(true))));
     }
 
     //
