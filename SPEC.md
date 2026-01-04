@@ -124,12 +124,24 @@ The Lua frontend translates Neovim's key representations into a format the Rust 
 | `<CR>` | `\|enter\|` |
 | `<Tab>` | `\|tab\|` |
 | `<BS>` | `\|backspace\|` |
+| `<Del>` | `\|delete\|` |
 | `<Space>` | `\|space\|` |
-| `<Esc>` | `<Esc>` |
+| `<Esc>` | `\|escape\|` |
+| `<Up>` | `\|up\|` |
+| `<Down>` | `\|down\|` |
+| `<Left>` | `\|left\|` |
+| `<Right>` | `\|right\|` |
+| `<Home>` | `\|home\|` |
+| `<End>` | `\|end\|` |
+| `<PageUp>` | `\|pageup\|` |
+| `<PageDown>` | `\|pagedown\|` |
+| `<Insert>` | `\|insert\|` |
 | `<C-X>` | `<C-X>` (preserved) |
 | Mouse events | Skipped |
 | Terminal codes | Skipped |
 | Insert mode | Skipped |
+| `<Cmd>` | Skipped |
+| Extended function keys (F13-F37) | Skipped |
 
 ---
 
@@ -350,14 +362,25 @@ The lexer should recognize and tokenize the following Vim commands:
 
 ### Pipe-Delimited Special Keys
 
-The lexer must handle sanitized special keys from the Lua frontend:
+The lexer handles sanitized special keys from the Lua frontend:
 
 | Sanitized Key | Meaning | Handling |
 |---------------|---------|----------|
-| `\|enter\|` | Enter/Return | Completes command sequences |
-| `\|tab\|` | Tab | Context-dependent |
-| `\|backspace\|` | Backspace | Context-dependent |
-| `\|space\|` | Space | Usually part of command args |
+| `\|enter\|` | Enter/Return | Completes command/search sequences |
+| `\|tab\|` | Tab | Adds tab character in command mode |
+| `\|backspace\|` | Backspace | Removes character in command mode |
+| `\|space\|` | Space | Adds space in command mode |
+| `\|escape\|` | Escape | Cancels command/search/replace modes |
+| `\|delete\|` | Delete | Currently unhandled |
+| `\|up\|` | Arrow Up | Currently unhandled |
+| `\|down\|` | Arrow Down | Currently unhandled |
+| `\|left\|` | Arrow Left | Currently unhandled |
+| `\|right\|` | Arrow Right | Currently unhandled |
+| `\|home\|` | Home | Currently unhandled |
+| `\|end\|` | End | Currently unhandled |
+| `\|pageup\|` | Page Up | Currently unhandled |
+| `\|pagedown\|` | Page Down | Currently unhandled |
+| `\|insert\|` | Insert | Currently unhandled |
 
 ### Lexer Implementation Notes
 
@@ -432,22 +455,22 @@ pub enum Token {
 | `MoveHorizontalBasic(n)` | HorizontalNavigation | 1 * n | Scaled by count |
 | `MoveVerticalChunk(n)` | VerticalNavigation | 5 * n | Scaled by count |
 | `MoveHorizontalChunk(n)` | HorizontalNavigation | 5 * n | Scaled by count |
-| `JumpToHorizontal` | CodeFlow | 10 | |
-| `JumpToLineNumber(_)` | CodeFlow | 10 | |
-| `JumpToVertical` | CodeFlow | 10 | |
-| `JumpFromContext` | CodeFlow | 10 | |
+| `JumpToHorizontal` | HorizontalNavigation | 10 | f/F/t/T jumps |
+| `JumpToLineNumber(_)` | VerticalNavigation | 10 | gg, G, :[n] |
+| `JumpToVertical` | VerticalNavigation | 10 | M, H, L, C-F, C-B |
+| `JumpFromContext` | CodeFlow | 10 | % matchit |
 | `CameraMovement` | CameraMovement | 10 | |
 | `WindowManagement` | WindowManagement | 10 | |
 | `TextManipulationBasic(n)` | TextManipulation | 1 * n | Scaled by count |
 | `TextManipulationAdvanced` | TextManipulation | 10 | |
 | `YankPaste` | Clipboard | 10 | |
-| `UndoRedo` | Finesse | 10 | |
+| `UndoRedo` | Clipboard | 10 | |
 | `DotRepeat` | Finesse | 10 | |
 | `CommandSearch(true)` | Search | 10 | Completed |
 | `CommandSearch(false)` | Search | 1 | Escaped |
 | `DeleteText(n)` | TextManipulation | 1 * n | Scaled by count |
-| `Command(true)` | - | 0 | No XP (generic) |
-| `Command(false)` | - | 0 | No XP |
+| `Command(true)` | Finesse | 10 | Generic commands |
+| `Command(false)` | Finesse | 1 | Escaped |
 | `HelpPage(true)` | Knowledge | 10 | Completed |
 | `HelpPage(false)` | Knowledge | 1 | Escaped |
 | `SaveFile(true)` | Saving | 10 | Completed |
@@ -584,9 +607,9 @@ A cursor-relative popup showing detailed skill information:
 
 ```lua
 {
-    db_path = vim.fn.stdpath("data") .. "/vimscape2007",
+    db_path = plugin_directory .. "/",  -- Plugin's own directory
     batch_size = 50,
-    log_level = "INFO",
+    log_level = vim.log.levels.INFO,    -- Integer log level
     batch_notify = false
 }
 ```
@@ -595,10 +618,12 @@ A cursor-relative popup showing detailed skill information:
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `db_path` | string | Plugin data dir | Directory for SQLite database |
+| `db_path` | string | Plugin directory | Directory for SQLite database |
 | `batch_size` | number | 50 | Keystrokes before processing batch |
-| `log_level` | string | "INFO" | Minimum log level for notifications |
+| `log_level` | integer | `vim.log.levels.INFO` | Minimum log level for notifications |
 | `batch_notify` | boolean | false | Show notification after each batch |
+
+**Note:** The database file is stored as `teste.db` within the configured `db_path` directory.
 
 ### Setup Example
 
@@ -639,9 +664,9 @@ This compiles the Rust backend and copies `libvimscape_backend.so` to `lua/vimsc
 
 ## Future Considerations
 
-1. **Lexer Expansion**: Many token types are defined but not yet implemented in the lexer
-2. **Pipe-Delimited Keys**: The lexer needs to handle `|enter|`, `|tab|`, etc. from sanitization
-3. **Multi-Character Sequences**: Complex patterns like `ci)`, `d3w`, `:help` need state tracking
-4. **Command Mode Parsing**: Full command mode support requires accumulating until terminator
-5. **Visual Mode**: Currently not tracked
-6. **Macro Recording**: Could track `q` register usage
+1. **Arrow Key Support**: Handle `|up|`, `|down|`, `|left|`, `|right|` in the lexer
+2. **Navigation Key Support**: Handle `|home|`, `|end|`, `|pageup|`, `|pagedown|` in the lexer
+3. **Visual Mode**: Currently not tracked
+4. **Macro Recording**: Could track `q` register usage
+5. **Register Access**: Full support for `"[reg]` prefix patterns
+6. **Database Filename**: Consider making the database filename configurable (currently hardcoded as `teste.db`)

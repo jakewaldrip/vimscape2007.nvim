@@ -114,7 +114,9 @@ impl<'a> Lexer<'a> {
                     self.input.next(); // consume closing '|'
                                        // Validate known pipe-delimited keys
                     match key_name.as_str() {
-                        "enter" | "tab" | "backspace" | "space" => return Some(key_name),
+                        "enter" | "tab" | "backspace" | "space" | "escape" => {
+                            return Some(key_name)
+                        }
                         _ => return None, // Unknown pipe-delimited key
                     }
                 }
@@ -132,7 +134,7 @@ impl<'a> Lexer<'a> {
     }
 
     /// Check if we've reached a terminator for command/search mode.
-    /// Returns Some(true) for |enter| (completed), Some(false) for <Esc> (cancelled).
+    /// Returns Some(true) for |enter| (completed), Some(false) for |escape| (cancelled).
     /// Returns None if current position is not a terminator.
     fn check_command_terminator(&mut self) -> Option<bool> {
         match self.input.peek() {
@@ -141,7 +143,7 @@ impl<'a> Lexer<'a> {
                 let mut peek_iter = self.input.clone();
                 peek_iter.next(); // skip '|'
 
-                // Check for "enter|"
+                // Check for "enter|" or "escape|"
                 let mut key_name = String::new();
                 loop {
                     match peek_iter.next() {
@@ -155,6 +157,15 @@ impl<'a> Lexer<'a> {
                                 self.input.next(); // '|'
                                 return Some(true);
                             }
+                            if key_name == "escape" {
+                                // Consume the |escape| from the real iterator
+                                self.input.next(); // '|'
+                                for _ in 0..6 {
+                                    self.input.next(); // "escape"
+                                }
+                                self.input.next(); // '|'
+                                return Some(false);
+                            }
                             return None;
                         }
                         Some(ch) => {
@@ -166,21 +177,6 @@ impl<'a> Lexer<'a> {
                         None => return None,
                     }
                 }
-            }
-            Some(&'<') => {
-                // Check for <Esc>
-                let mut peek_iter = self.input.clone();
-                peek_iter.next(); // skip '<'
-
-                let chars: String = peek_iter.take(4).collect();
-                if chars == "Esc>" {
-                    // Consume <Esc> from real iterator
-                    for _ in 0..5 {
-                        self.input.next();
-                    }
-                    return Some(false);
-                }
-                None
             }
             _ => None,
         }
@@ -553,17 +549,17 @@ impl<'a> Lexer<'a> {
         if let Some((mode_type, mut content)) = mode_content {
             // mode_type: 0 = CommandMode, 1 = SearchMode, 2 = ReplaceMode
 
-            // ReplaceMode only terminates on <Esc>
+            // ReplaceMode only terminates on |escape|
             if mode_type == 2 {
                 loop {
-                    // Check for <Esc> terminator
-                    if let Some(&'<') = self.input.peek() {
+                    // Check for |escape| terminator
+                    if let Some(&'|') = self.input.peek() {
                         let mut peek_iter = self.input.clone();
-                        peek_iter.next(); // skip '<'
-                        let chars: String = peek_iter.take(4).collect();
-                        if chars == "Esc>" {
-                            // Consume <Esc> from real iterator
-                            for _ in 0..5 {
+                        peek_iter.next(); // skip '|'
+                        let chars: String = peek_iter.take(7).collect();
+                        if chars == "escape|" {
+                            // Consume |escape| from real iterator
+                            for _ in 0..8 {
                                 self.input.next();
                             }
                             self.state = State::None;
@@ -574,7 +570,7 @@ impl<'a> Lexer<'a> {
                     match self.input.next() {
                         Some(ch) => content.push(ch),
                         None => {
-                            // End of input without <Esc> - treat as incomplete
+                            // End of input without |escape| - treat as incomplete
                             self.state = State::None;
                             return Some(Token::TextManipulationAdvanced);
                         }
@@ -940,19 +936,18 @@ impl<'a> Lexer<'a> {
                         if let Some(ctrl_char) = self.try_parse_control_sequence() {
                             self.handle_control_sequence(ctrl_char, 1)
                         } else {
-                            // Check for <Esc> sequence
-                            // We need to check if the remaining chars are "Esc>"
-                            let mut peek_iter = self.input.clone();
-                            let chars: String = peek_iter.take(4).collect();
-                            if chars == "Esc>" {
-                                // Consume "Esc>" from real iterator
-                                for _ in 0..4 {
-                                    self.input.next();
-                                }
-                                Some(Token::Unhandled("<Esc>".into()))
-                            } else {
-                                Some(Token::Unhandled("<".into()))
+                            Some(Token::Unhandled("<".into()))
+                        }
+                    }
+                    '|' => {
+                        // Try to parse pipe-delimited special key
+                        if let Some(key) = self.try_parse_pipe_delimited() {
+                            match key.as_str() {
+                                "escape" => Some(Token::Unhandled("|escape|".into())),
+                                _ => Some(Token::Unhandled(format!("|{}|", key))),
                             }
+                        } else {
+                            Some(Token::Unhandled("|".into()))
                         }
                     }
                     ':' => {
@@ -1513,7 +1508,7 @@ mod tests {
 
     #[test]
     fn test_search_cancelled() {
-        let mut lexer = Lexer::new("/test<Esc>");
+        let mut lexer = Lexer::new("/test|escape|");
         assert!(matches!(
             lexer.next_token(),
             Some(Token::CommandSearch(false))
@@ -1537,21 +1532,21 @@ mod tests {
 
     #[test]
     fn test_help_page() {
-        let mut lexer = Lexer::new(":h test|enter|:help topic<Esc>");
+        let mut lexer = Lexer::new(":h test|enter|:help topic|escape|");
         assert!(matches!(lexer.next_token(), Some(Token::HelpPage(true))));
         assert!(matches!(lexer.next_token(), Some(Token::HelpPage(false))));
     }
 
     #[test]
     fn test_save_file() {
-        let mut lexer = Lexer::new(":w|enter|:w<Esc>");
+        let mut lexer = Lexer::new(":w|enter|:w|escape|");
         assert!(matches!(lexer.next_token(), Some(Token::SaveFile(true))));
         assert!(matches!(lexer.next_token(), Some(Token::SaveFile(false))));
     }
 
     #[test]
     fn test_generic_command() {
-        let mut lexer = Lexer::new(":Vimscape|enter|:q<Esc>");
+        let mut lexer = Lexer::new(":Vimscape|enter|:q|escape|");
         assert!(matches!(lexer.next_token(), Some(Token::Command(true))));
         assert!(matches!(lexer.next_token(), Some(Token::Command(false))));
     }
@@ -1565,7 +1560,7 @@ mod tests {
     // Phase 7 test cases - Replace Mode and Advanced Text Manipulation
     #[test]
     fn test_replace_mode() {
-        let mut lexer = Lexer::new("Rtest<Esc>");
+        let mut lexer = Lexer::new("Rtest|escape|");
         assert!(matches!(
             lexer.next_token(),
             Some(Token::TextManipulationAdvanced)
@@ -1574,7 +1569,7 @@ mod tests {
 
     #[test]
     fn test_replace_mode_empty() {
-        let mut lexer = Lexer::new("R<Esc>");
+        let mut lexer = Lexer::new("R|escape|");
         assert!(matches!(
             lexer.next_token(),
             Some(Token::TextManipulationAdvanced)
@@ -1658,8 +1653,8 @@ mod tests {
 
     #[test]
     fn test_escape_outside_command() {
-        let mut lexer = Lexer::new("<Esc>");
-        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "<Esc>"));
+        let mut lexer = Lexer::new("|escape|");
+        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "|escape|"));
     }
 
     #[test]
