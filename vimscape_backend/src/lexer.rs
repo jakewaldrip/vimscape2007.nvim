@@ -186,6 +186,26 @@ impl<'a> Lexer<'a> {
                                     None => Some(Token::Unhandled("z".into())),
                                 }
                             }
+                            'f' | 'F' | 't' | 'T' => {
+                                self.input.next(); // consume the command char
+                                                   // These commands consume the next character as the target
+                                if self.input.next().is_some() {
+                                    Some(Token::JumpToHorizontal)
+                                } else {
+                                    Some(Token::Unhandled(ch.to_string()))
+                                }
+                            }
+                            'r' => {
+                                self.input.next(); // consume 'r'
+                                                   // Replace command consumes the next character
+                                if self.input.next().is_some() {
+                                    Some(Token::TextManipulationBasic(
+                                        i32::try_from(count).unwrap(),
+                                    ))
+                                } else {
+                                    Some(Token::Unhandled("r".into()))
+                                }
+                            }
                             '<' => {
                                 self.input.next(); // consume '<'
                                 if let Some(ctrl_char) = self.try_parse_control_sequence() {
@@ -248,6 +268,22 @@ impl<'a> Lexer<'a> {
                             Some('z') | Some('t') | Some('b') => Some(Token::CameraMovement),
                             Some(ch) => Some(Token::Unhandled(format!("z{}", ch))),
                             None => Some(Token::Unhandled("z".into())),
+                        }
+                    }
+                    'f' | 'F' | 't' | 'T' => {
+                        // These commands consume the next character as the target
+                        if self.input.next().is_some() {
+                            Some(Token::JumpToHorizontal)
+                        } else {
+                            Some(Token::Unhandled(ch.to_string()))
+                        }
+                    }
+                    'r' => {
+                        // Replace command consumes the next character
+                        if self.input.next().is_some() {
+                            Some(Token::TextManipulationBasic(1))
+                        } else {
+                            Some(Token::Unhandled("r".into()))
                         }
                     }
                     '<' => {
@@ -623,6 +659,46 @@ mod tests {
     fn test_incomplete_z() {
         let mut lexer = Lexer::new("z");
         assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "z"));
+    }
+
+    // Phase 4 test cases
+    #[test]
+    fn test_jump_horizontal_f() {
+        let mut lexer = Lexer::new("fa");
+        assert!(matches!(lexer.next_token(), Some(Token::JumpToHorizontal)));
+    }
+
+    #[test]
+    fn test_jump_horizontal_all() {
+        let mut lexer = Lexer::new("fxFytzT0");
+        for _ in 0..4 {
+            assert!(matches!(lexer.next_token(), Some(Token::JumpToHorizontal)));
+        }
+    }
+
+    #[test]
+    fn test_replace_char() {
+        let mut lexer = Lexer::new("ra5rx");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationBasic(1))
+        ));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationBasic(5))
+        ));
+    }
+
+    #[test]
+    fn test_jump_horizontal_incomplete() {
+        let mut lexer = Lexer::new("f");
+        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "f"));
+    }
+
+    #[test]
+    fn test_replace_char_incomplete() {
+        let mut lexer = Lexer::new("r");
+        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "r"));
     }
 
     //
