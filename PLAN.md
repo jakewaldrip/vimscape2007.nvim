@@ -151,7 +151,7 @@ Control characters arrive from the Lua frontend in the format `<C-X>` where X is
 
 ### Tasks
 
-1. **Add helper function to parse control sequences:**
+- [x] 1. **Add helper function to parse control sequences:**
    ```rust
    fn try_parse_control_sequence(&mut self) -> Option<String> {
        // Peek ahead to check for <C-X> pattern
@@ -160,23 +160,23 @@ Control characters arrive from the Lua frontend in the format `<C-X>` where X is
    }
    ```
 
-2. **Add `<C-U>`, `<C-D>` → `MoveVerticalChunk(n)`**
+- [x] 2. **Add `<C-U>`, `<C-D>` → `MoveVerticalChunk(n)`**
    - Supports numeric prefix
    - Example: `<C-U>` → `MoveVerticalChunk(1)`, `5<C-D>` → `MoveVerticalChunk(5)`
 
-3. **Add `<C-F>`, `<C-B>` → `JumpToVertical`**
+- [x] 3. **Add `<C-F>`, `<C-B>` → `JumpToVertical`**
    - No numeric prefix support
 
-4. **Add `<C-E>`, `<C-Y>` → `CameraMovement`**
+- [x] 4. **Add `<C-E>`, `<C-Y>` → `CameraMovement`**
    - No numeric prefix support
 
-5. **Add `<C-R>` → `UndoRedo`**
+- [x] 5. **Add `<C-R>` → `UndoRedo`**
    - No numeric prefix support
 
-6. **Add `<C-H>`, `<C-J>`, `<C-K>`, `<C-L>` → `WindowManagement`**
+- [x] 6. **Add `<C-H>`, `<C-J>`, `<C-K>`, `<C-L>` → `WindowManagement`**
    - No numeric prefix support
 
-7. **Add `<C-W>` → `WindowManagement`**
+- [x] 7. **Add `<C-W>` → `WindowManagement`**
    - Consumes the next character as well (e.g., `<C-W>s`, `<C-W>v`)
    - The follow-up character is part of the command but not parsed separately
 
@@ -245,14 +245,14 @@ fn test_control_window_management() {
 
 ### Tasks
 
-1. **Add `g` prefix handling:**
+- [x] 1. **Add `g` prefix handling:**
    - `gj`, `gk` → `MoveVerticalBasic(n)` (supports numeric prefix)
    - `gg` → `JumpToLineNumber(String)` (with optional numeric prefix: `10gg` → `JumpToLineNumber("10")`)
    - `gJ` → `TextManipulationBasic(n)` (supports numeric prefix)
    - `g~`, `gu`, `gU` → requires motion (see Phase 5)
    - Unrecognized `g` + char → `Unhandled("gX")`
 
-2. **Add `z` prefix handling:**
+- [x] 2. **Add `z` prefix handling:**
    - `zz` → `CameraMovement`
    - `zb` → `CameraMovement`
    - `zt` → `CameraMovement`
