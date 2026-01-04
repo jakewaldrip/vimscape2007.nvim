@@ -266,6 +266,7 @@ mod tests {
         let mut lexer = Lexer::new("");
         assert!(lexer.next_token().is_none());
     }
+
     //
     // #[test]
     // fn basic_vertical_movements() {
