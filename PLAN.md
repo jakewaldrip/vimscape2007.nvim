@@ -712,25 +712,25 @@ fn test_case_with_count() {
 
 ### Tasks
 
-1. **Add `%` → `JumpFromContext`**
+- [x] 1. **Add `%` → `JumpFromContext`**
    - Single character, no lookahead needed
    - Note: In actual Vim, this expands to matchit call, but we just recognize `%`
 
-2. **Handle `0` at line start**
+- [x] 2. **Handle `0` at line start**
    - `0` alone → `Unhandled("0")` (already implemented, verify behavior)
    - `0` in numeric prefix → not allowed (already implemented)
 
-3. **Handle incomplete sequences gracefully:**
+- [x] 3. **Handle incomplete sequences gracefully:**
    - `g` at end of input → `Unhandled("g")`
    - `z` at end of input → `Unhandled("z")`
    - `d` at end of input → `Unhandled("d")`
    - `<C-` at end of input → `Unhandled("<C-")`
 
-4. **Handle escape sequence `<Esc>`:**
+- [x] 4. **Handle escape sequence `<Esc>`:**
    - Outside command mode → `Unhandled("<Esc>")` or ignore
    - Inside command/search mode → terminates with `false`
 
-5. **Handle `Y` → `YankPaste`**
+- [x] 5. **Handle `Y` → `YankPaste`**
    - Alias for `y$` (yank to end of line)
 
 ### Test Cases to Add

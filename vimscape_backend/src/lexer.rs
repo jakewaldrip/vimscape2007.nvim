@@ -931,12 +931,28 @@ impl<'a> Lexer<'a> {
                         // Y is alias for y$ (yank to end of line)
                         Some(Token::YankPaste)
                     }
+                    '%' => {
+                        // Jump to matching bracket (matchit)
+                        Some(Token::JumpFromContext)
+                    }
                     '<' => {
                         // Try to parse control sequence
                         if let Some(ctrl_char) = self.try_parse_control_sequence() {
                             self.handle_control_sequence(ctrl_char, 1)
                         } else {
-                            Some(Token::Unhandled("<".into()))
+                            // Check for <Esc> sequence
+                            // We need to check if the remaining chars are "Esc>"
+                            let mut peek_iter = self.input.clone();
+                            let chars: String = peek_iter.take(4).collect();
+                            if chars == "Esc>" {
+                                // Consume "Esc>" from real iterator
+                                for _ in 0..4 {
+                                    self.input.next();
+                                }
+                                Some(Token::Unhandled("<Esc>".into()))
+                            } else {
+                                Some(Token::Unhandled("<".into()))
+                            }
                         }
                     }
                     ':' => {
@@ -1631,6 +1647,53 @@ mod tests {
     fn test_incomplete_case_operator() {
         let mut lexer = Lexer::new("gu");
         assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "gu"));
+    }
+
+    // Phase 8 test cases - Special Sequences and Edge Cases
+    #[test]
+    fn test_jump_from_context() {
+        let mut lexer = Lexer::new("%");
+        assert!(matches!(lexer.next_token(), Some(Token::JumpFromContext)));
+    }
+
+    #[test]
+    fn test_escape_outside_command() {
+        let mut lexer = Lexer::new("<Esc>");
+        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "<Esc>"));
+    }
+
+    #[test]
+    fn test_mixed_complex_sequence() {
+        let mut lexer = Lexer::new("5j/test|enter|dd3gkzz:w|enter|");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::MoveVerticalBasic(5))
+        ));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::CommandSearch(true))
+        ));
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::MoveVerticalBasic(3))
+        ));
+        assert!(matches!(lexer.next_token(), Some(Token::CameraMovement)));
+        assert!(matches!(lexer.next_token(), Some(Token::SaveFile(true))));
+    }
+
+    #[test]
+    fn test_percent_with_other_commands() {
+        let mut lexer = Lexer::new("j%k");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::MoveVerticalBasic(1))
+        ));
+        assert!(matches!(lexer.next_token(), Some(Token::JumpFromContext)));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::MoveVerticalBasic(1))
+        ));
     }
 
     //
