@@ -80,9 +80,21 @@ impl<'a> Lexer<'a> {
                                 self.input.next(); // Consume the command
                                 Some(Token::MoveVerticalBasic(i32::try_from(count).unwrap()))
                             }
-                            'w' | 'b' => {
+                            'h' | 'l' => {
                                 self.input.next();
                                 Some(Token::MoveHorizontalBasic(i32::try_from(count).unwrap()))
+                            }
+                            'w' | 'W' | 'e' | 'E' | 'b' | 'B' => {
+                                self.input.next();
+                                Some(Token::MoveHorizontalChunk(i32::try_from(count).unwrap()))
+                            }
+                            'x' | 'J' => {
+                                self.input.next();
+                                Some(Token::TextManipulationBasic(i32::try_from(count).unwrap()))
+                            }
+                            'G' => {
+                                self.input.next();
+                                Some(Token::JumpToLineNumber(accumulated))
                             }
                             _ => {
                                 // Not a command we handle with counts
@@ -111,7 +123,15 @@ impl<'a> Lexer<'a> {
                 // Regular token processing
                 match ch {
                     'j' | 'k' => Some(Token::MoveVerticalBasic(1)),
-                    'w' | 'b' => Some(Token::MoveHorizontalBasic(1)),
+                    'h' | 'l' => Some(Token::MoveHorizontalBasic(1)),
+                    'w' | 'W' | 'e' | 'E' | 'b' | 'B' => Some(Token::MoveHorizontalChunk(1)),
+                    'u' | 'U' => Some(Token::UndoRedo),
+                    '.' => Some(Token::DotRepeat),
+                    'M' | 'H' | 'L' => Some(Token::JumpToVertical),
+                    'p' | 'P' => Some(Token::YankPaste),
+                    'x' => Some(Token::TextManipulationBasic(1)),
+                    'J' => Some(Token::TextManipulationBasic(1)),
+                    'G' => Some(Token::JumpToLineNumber(String::new())),
                     _ => Some(Token::Unhandled(ch.into())),
                 }
             }
@@ -207,7 +227,7 @@ mod tests {
 
     #[test]
     fn test_mixed_input() {
-        let mut lexer = Lexer::new("j5kx");
+        let mut lexer = Lexer::new("j5ka");
         assert!(matches!(
             lexer.next_token(),
             Some(Token::MoveVerticalBasic(1))
@@ -216,7 +236,7 @@ mod tests {
             lexer.next_token(),
             Some(Token::MoveVerticalBasic(5))
         ));
-        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "x"));
+        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "a"));
         assert!(lexer.next_token().is_none());
     }
 
@@ -230,8 +250,10 @@ mod tests {
     #[test]
     fn test_mixed_digits_and_commands() {
         let mut lexer = Lexer::new("12x34j");
-        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "12"));
-        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "x"));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationBasic(12))
+        ));
         assert!(matches!(
             lexer.next_token(),
             Some(Token::MoveVerticalBasic(34))
@@ -240,11 +262,11 @@ mod tests {
     }
 
     #[test]
-    fn test_move_horizontal_and_move_vertical() {
+    fn test_move_horizontal_chunk_and_move_vertical() {
         let mut lexer = Lexer::new("2w3kbj");
         assert!(matches!(
             lexer.next_token(),
-            Some(Token::MoveHorizontalBasic(2))
+            Some(Token::MoveHorizontalChunk(2))
         ));
         assert!(matches!(
             lexer.next_token(),
@@ -252,7 +274,7 @@ mod tests {
         ));
         assert!(matches!(
             lexer.next_token(),
-            Some(Token::MoveHorizontalBasic(1))
+            Some(Token::MoveHorizontalChunk(1))
         ));
         assert!(matches!(
             lexer.next_token(),
@@ -265,6 +287,92 @@ mod tests {
     fn no_input_as_none() {
         let mut lexer = Lexer::new("");
         assert!(lexer.next_token().is_none());
+    }
+
+    // Phase 1 test cases
+    #[test]
+    fn test_horizontal_basic() {
+        let mut lexer = Lexer::new("h5l");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::MoveHorizontalBasic(1))
+        ));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::MoveHorizontalBasic(5))
+        ));
+    }
+
+    #[test]
+    fn test_horizontal_chunk() {
+        let mut lexer = Lexer::new("wWeEbB");
+        for _ in 0..6 {
+            assert!(matches!(
+                lexer.next_token(),
+                Some(Token::MoveHorizontalChunk(1))
+            ));
+        }
+    }
+
+    #[test]
+    fn test_undo_redo() {
+        let mut lexer = Lexer::new("uU");
+        assert!(matches!(lexer.next_token(), Some(Token::UndoRedo)));
+        assert!(matches!(lexer.next_token(), Some(Token::UndoRedo)));
+    }
+
+    #[test]
+    fn test_dot_repeat() {
+        let mut lexer = Lexer::new(".");
+        assert!(matches!(lexer.next_token(), Some(Token::DotRepeat)));
+    }
+
+    #[test]
+    fn test_jump_to_vertical() {
+        let mut lexer = Lexer::new("MHL");
+        for _ in 0..3 {
+            assert!(matches!(lexer.next_token(), Some(Token::JumpToVertical)));
+        }
+    }
+
+    #[test]
+    fn test_yank_paste() {
+        let mut lexer = Lexer::new("pP");
+        assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
+        assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
+    }
+
+    #[test]
+    fn test_text_manipulation_basic_x() {
+        let mut lexer = Lexer::new("x5x");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationBasic(1))
+        ));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationBasic(5))
+        ));
+    }
+
+    #[test]
+    fn test_text_manipulation_basic_j() {
+        let mut lexer = Lexer::new("J3J");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationBasic(1))
+        ));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationBasic(3))
+        ));
+    }
+
+    #[test]
+    fn test_jump_to_line_g() {
+        let mut lexer = Lexer::new("G10G");
+        assert!(matches!(lexer.next_token(), Some(Token::JumpToLineNumber(ref s)) if s == ""));
+        assert!(matches!(lexer.next_token(), Some(Token::JumpToLineNumber(ref s)) if s == "10"));
     }
 
     //
