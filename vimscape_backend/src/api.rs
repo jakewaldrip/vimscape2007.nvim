@@ -4,8 +4,8 @@ use rusqlite::Connection;
 
 use crate::{
     db::{
-        create_tables, get_skill_data, get_skill_details_from_db, write_exp_to_table,
-        write_levels_to_table,
+        create_tables, get_skill_data, get_skill_details_from_db, write_exp_to_table_tx,
+        write_levels_to_table_tx,
     },
     levels::{get_levels_diff, get_updated_levels, notify_level_ups},
     lexer::Lexer,
@@ -33,12 +33,38 @@ pub fn process_batch((input, db_path): (String, String)) -> bool {
         return false;
     };
 
-    let skill_data = get_skill_data(&conn).expect("Failed to query for skill data");
+    let skill_data = get_skill_data(&conn);
+    if skill_data.is_empty() {
+        eprintln!("[vimscape] No skill data found in database");
+        return false;
+    }
+
     let updated_levels = get_updated_levels(&skill_data, &skills);
     let levels_diff = get_levels_diff(&skill_data, &updated_levels);
 
-    write_levels_to_table(&conn, &levels_diff);
-    write_exp_to_table(&conn, skills);
+    // Single transaction for all writes to ensure atomicity
+    let tx = match conn.unchecked_transaction() {
+        Ok(tx) => tx,
+        Err(e) => {
+            eprintln!("[vimscape] Transaction start failed: {e}");
+            return false;
+        }
+    };
+
+    // Write both levels and XP within the same transaction
+    if !write_levels_to_table_tx(&tx, &levels_diff) {
+        return false;
+    }
+    if !write_exp_to_table_tx(&tx, skills) {
+        return false;
+    }
+
+    if let Err(e) = tx.commit() {
+        eprintln!("[vimscape] Commit failed: {e}");
+        return false;
+    }
+
+    // Notifications happen after successful commit
     notify_level_ups(&levels_diff);
 
     true
@@ -50,9 +76,8 @@ pub fn get_user_data((col_len, db_path): (i32, String)) -> Vec<String> {
         return Vec::new();
     };
 
-    let skill_data = get_skill_data(&conn).expect("Failed to query for skill data");
-    let display_strings: Vec<String> = format_skill_data(&skill_data, col_len);
-    display_strings
+    let skill_data = get_skill_data(&conn);
+    format_skill_data(&skill_data, col_len)
 }
 
 #[allow(clippy::needless_pass_by_value)]
@@ -71,8 +96,7 @@ pub fn get_skill_details((c_word, db_path): (String, String)) -> Vec<String> {
         return Vec::new();
     };
 
-    let skill_data_vec =
-        get_skill_details_from_db(&conn, &c_word).expect("Failed to get skills from database");
+    let skill_data_vec = get_skill_details_from_db(&conn, &c_word);
     if let Some(skill_data) = skill_data_vec.first() {
         format_skill_details(skill_data)
     } else {
