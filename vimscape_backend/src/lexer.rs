@@ -1,3 +1,35 @@
+//! Vim Command Lexer
+//!
+//! This module implements a state machine lexer that tokenizes Vim-style command sequences
+//! into discrete tokens for processing by the game engine.
+//!
+//! # State Machine Overview
+//!
+//! The lexer operates using the following states:
+//! - `State::None` - Initial state, awaiting first character of a command
+//! - `State::AccumulatingCount` - Parsing numeric prefix (e.g., "123" in "123j")
+//! - `State::OperatorPending` - Awaiting motion after operator (d, y, c)
+//! - `State::CaseOperatorPending` - Awaiting motion after case operator (g~, gu, gU)
+//! - `State::CommandMode` - Parsing Ex command after ':'
+//! - `State::SearchMode` - Parsing search pattern after '/' or '?'
+//! - `State::ReplaceMode` - Parsing replacement character after 'r'
+//!
+//! # Intentionally Unhandled Commands
+//!
+//! The following command categories are intentionally returned as `Token::Unhandled`:
+//!
+//! - **Insert mode commands** (`o`, `O`, `i`, `I`, `a`, `A`): These enter insert mode,
+//!   which is not tracked by this lexer since the game handles text input separately.
+//!
+//! - **Visual mode commands** (`v`, `V`, `<C-V>`): Visual mode selection is a future
+//!   consideration per the project specification.
+//!
+//! - **Macro commands** (`q`, `@`): Macro recording and playback is a future
+//!   consideration per the project specification.
+//!
+//! - **Window split commands** (`:sp`, `:vs`): Window management beyond basic
+//!   navigation is handled elsewhere.
+
 use std::{iter::Peekable, str::Chars};
 
 use crate::token::Token;
@@ -240,6 +272,79 @@ impl<'a> Lexer<'a> {
         count
     }
 
+    /// Maps operator + count to the appropriate token
+    fn operator_to_token(operator: Operator, count: u32) -> Token {
+        match operator {
+            Operator::Delete => Token::DeleteText(i32::try_from(count).unwrap()),
+            Operator::Yank => Token::YankPaste,
+            Operator::Change => Token::TextManipulationAdvanced,
+        }
+    }
+
+    /// Maps operator to its character representation (for error messages)
+    fn operator_to_char(operator: Operator) -> char {
+        match operator {
+            Operator::Delete => 'd',
+            Operator::Yank => 'y',
+            Operator::Change => 'c',
+        }
+    }
+
+    /// Result of handling a simple command character
+    enum CommandResult {
+        /// Return this token immediately
+        Token(Token),
+        /// Need to consume next char, then return token
+        ConsumeNextThenToken(Token),
+        /// Need to consume next char, if present return first token, else second
+        ConsumeNextOptional(Token, Token),
+        /// Not a simple command - needs special handling
+        NotSimple,
+    }
+
+    /// Handles simple command characters that can work with a count.
+    /// Returns Some(CommandResult) for commands that can be handled simply,
+    /// None for commands that need special state handling.
+    fn handle_simple_command(ch: char, count: u32) -> CommandResult {
+        let count_i32 = i32::try_from(count).unwrap_or(1);
+        match ch {
+            'j' | 'k' => CommandResult::Token(Token::MoveVerticalBasic(count_i32)),
+            'h' | 'l' => CommandResult::Token(Token::MoveHorizontalBasic(count_i32)),
+            'w' | 'W' | 'e' | 'E' | 'b' | 'B' => {
+                CommandResult::Token(Token::MoveHorizontalChunk(count_i32))
+            }
+            'u' | 'U' => CommandResult::Token(Token::UndoRedo),
+            '.' => CommandResult::Token(Token::DotRepeat),
+            'M' | 'H' | 'L' => CommandResult::Token(Token::JumpToVertical),
+            'p' | 'P' => CommandResult::Token(Token::YankPaste),
+            'x' | 'J' => CommandResult::Token(Token::TextManipulationBasic(count_i32)),
+            'X' => CommandResult::Token(Token::TextManipulationBasic(count_i32)),
+            'D' => CommandResult::Token(Token::DeleteText(count_i32)),
+            's' => CommandResult::Token(Token::TextManipulationAdvanced),
+            'S' => CommandResult::Token(Token::TextManipulationAdvanced),
+            'C' => CommandResult::Token(Token::TextManipulationAdvanced),
+            'Y' => CommandResult::Token(Token::YankPaste),
+            '~' => CommandResult::Token(Token::TextManipulationAdvanced),
+            'n' | 'N' => CommandResult::Token(Token::SearchRepeat),
+            ';' | ',' => CommandResult::Token(Token::SearchRepeat),
+            '%' => CommandResult::Token(Token::JumpFromContext),
+            'f' | 'F' | 't' | 'T' => CommandResult::ConsumeNextOptional(
+                Token::JumpToHorizontal,
+                Token::Unhandled(ch.to_string()),
+            ),
+            'r' => CommandResult::ConsumeNextOptional(
+                Token::TextManipulationBasic(count_i32),
+                Token::Unhandled("r".into()),
+            ),
+            'm' => CommandResult::ConsumeNextOptional(Token::Marks, Token::Unhandled("m".into())),
+            '\'' => {
+                CommandResult::ConsumeNextOptional(Token::Marks, Token::Unhandled("'".into()))
+            }
+            '`' => CommandResult::ConsumeNextOptional(Token::Marks, Token::Unhandled("`".into())),
+            _ => CommandResult::NotSimple,
+        }
+    }
+
     /// Check if a character is a valid text object specifier
     fn is_text_object_char(ch: char) -> bool {
         matches!(
@@ -259,27 +364,14 @@ impl<'a> Lexer<'a> {
     fn handle_operator_motion(&mut self, operator: Operator, count: u32) -> Token {
         let Some(ch) = self.input.next() else {
             // End of input - incomplete operator
-            let op_char = match operator {
-                Operator::Delete => 'd',
-                Operator::Yank => 'y',
-                Operator::Change => 'c',
-            };
-            return Token::Unhandled(op_char.to_string());
+            return Token::Unhandled(Self::operator_to_char(operator).to_string());
         };
 
         // Handle doubled operator (dd, yy, cc) - line operation
-        let is_doubled = match operator {
-            Operator::Delete => ch == 'd',
-            Operator::Yank => ch == 'y',
-            Operator::Change => ch == 'c',
-        };
+        let is_doubled = ch == Self::operator_to_char(operator);
 
         if is_doubled {
-            return match operator {
-                Operator::Delete => Token::DeleteText(i32::try_from(count).unwrap()),
-                Operator::Yank => Token::YankPaste,
-                Operator::Change => Token::TextManipulationAdvanced,
-            };
+            return Self::operator_to_token(operator, count);
         }
 
         // Handle motion count (e.g., d3w)
@@ -308,11 +400,7 @@ impl<'a> Lexer<'a> {
             if let Some(&obj_ch) = self.input.peek() {
                 if Self::is_text_object_char(obj_ch) {
                     self.input.next(); // consume the object char
-                    return match operator {
-                        Operator::Delete => Token::DeleteText(i32::try_from(count).unwrap()),
-                        Operator::Yank => Token::YankPaste,
-                        Operator::Change => Token::TextManipulationAdvanced,
-                    };
+                    return Self::operator_to_token(operator, count);
                 }
             }
         }
@@ -326,29 +414,16 @@ impl<'a> Lexer<'a> {
         match ch {
             // Word/chunk motions, line position motions, basic movements
             'w' | 'W' | 'e' | 'E' | 'b' | 'B' | '$' | '^' | '0' | 'j' | 'k' | 'h' | 'l' => {
-                match operator {
-                    Operator::Delete => Token::DeleteText(i32::try_from(count).unwrap()),
-                    Operator::Yank => Token::YankPaste,
-                    Operator::Change => Token::TextManipulationAdvanced,
-                }
+                Self::operator_to_token(operator, count)
             }
             // Find char motions (consume target char)
             'f' | 'F' | 't' | 'T' => {
                 // Consume the target character
                 if self.input.next().is_some() {
-                    match operator {
-                        Operator::Delete => Token::DeleteText(i32::try_from(count).unwrap()),
-                        Operator::Yank => Token::YankPaste,
-                        Operator::Change => Token::TextManipulationAdvanced,
-                    }
+                    Self::operator_to_token(operator, count)
                 } else {
                     // Incomplete find motion
-                    let op_char = match operator {
-                        Operator::Delete => 'd',
-                        Operator::Yank => 'y',
-                        Operator::Change => 'c',
-                    };
-                    Token::Unhandled(format!("{op_char}{ch}"))
+                    Token::Unhandled(format!("{}{ch}", Self::operator_to_char(operator)))
                 }
             }
             // g-prefix motions (gg, gj, gk, g$, etc.)
@@ -356,38 +431,20 @@ impl<'a> Lexer<'a> {
                 if let Some(&next_ch) = self.input.peek() {
                     self.input.next();
                     match next_ch {
-                        'g' | 'j' | 'k' | '$' | '^' | '0' | 'e' | 'E' => match operator {
-                            Operator::Delete => Token::DeleteText(i32::try_from(count).unwrap()),
-                            Operator::Yank => Token::YankPaste,
-                            Operator::Change => Token::TextManipulationAdvanced,
-                        },
-                        _ => {
-                            let op_char = match operator {
-                                Operator::Delete => 'd',
-                                Operator::Yank => 'y',
-                                Operator::Change => 'c',
-                            };
-                            Token::Unhandled(format!("{op_char}g{next_ch}"))
+                        'g' | 'j' | 'k' | '$' | '^' | '0' | 'e' | 'E' => {
+                            Self::operator_to_token(operator, count)
                         }
+                        _ => Token::Unhandled(format!(
+                            "{}g{next_ch}",
+                            Self::operator_to_char(operator)
+                        )),
                     }
                 } else {
-                    let op_char = match operator {
-                        Operator::Delete => 'd',
-                        Operator::Yank => 'y',
-                        Operator::Change => 'c',
-                    };
-                    Token::Unhandled(format!("{op_char}g"))
+                    Token::Unhandled(format!("{}g", Self::operator_to_char(operator)))
                 }
             }
             // Unrecognized motion
-            _ => {
-                let op_char = match operator {
-                    Operator::Delete => 'd',
-                    Operator::Yank => 'y',
-                    Operator::Change => 'c',
-                };
-                Token::Unhandled(format!("{op_char}{ch}"))
-            }
+            _ => Token::Unhandled(format!("{}{ch}", Self::operator_to_char(operator))),
         }
     }
 
@@ -396,12 +453,7 @@ impl<'a> Lexer<'a> {
         if let Some(ch) = self.input.next() {
             self.handle_operator_char_motion(operator, count, ch)
         } else {
-            let op_char = match operator {
-                Operator::Delete => 'd',
-                Operator::Yank => 'y',
-                Operator::Change => 'c',
-            };
-            Token::Unhandled(op_char.to_string())
+            Token::Unhandled(Self::operator_to_char(operator).to_string())
         }
     }
 
@@ -434,11 +486,13 @@ impl<'a> Lexer<'a> {
         }
 
         // Handle regular motions
-        self.handle_case_operator_char_motion(operator, count, ch)
+        self.handle_case_operator_char_motion(operator, ch)
     }
 
-    /// Handle case operator with a motion character
-    fn handle_case_operator_char_motion(&mut self, operator: &str, _count: u32, ch: char) -> Token {
+    /// Handle case operator with a motion character.
+    /// Note: count is not used here because TextManipulationAdvanced doesn't carry count info.
+    /// The motion itself (not the case operator) determines the range.
+    fn handle_case_operator_char_motion(&mut self, operator: &str, ch: char) -> Token {
         match ch {
             // Word/chunk motions, line position motions, basic movements
             'w' | 'W' | 'e' | 'E' | 'b' | 'B' | '$' | '^' | '0' | 'j' | 'k' | 'h' | 'l' => {
@@ -486,7 +540,7 @@ impl<'a> Lexer<'a> {
     /// Handle case operator with accumulated motion count
     fn handle_case_operator_with_motion(&mut self, operator: &str, count: u32) -> Token {
         if let Some(ch) = self.input.next() {
-            self.handle_case_operator_char_motion(operator, count, ch)
+            self.handle_case_operator_char_motion(operator, ch)
         } else {
             Token::Unhandled(operator.to_string())
         }
@@ -610,24 +664,30 @@ impl<'a> Lexer<'a> {
                         let accumulated = self.accumulated_string.clone();
                         self.accumulated_string.clear();
 
-                        // Note: Future extension for characters that accept counts goes here
+                        // Try simple command handling first
+                        match Self::handle_simple_command(ch, count) {
+                            CommandResult::Token(token) => {
+                                self.input.next();
+                                return Some(token);
+                            }
+                            CommandResult::ConsumeNextOptional(success, failure) => {
+                                self.input.next(); // consume command char
+                                return if self.input.next().is_some() {
+                                    Some(success)
+                                } else {
+                                    Some(failure)
+                                };
+                            }
+                            CommandResult::ConsumeNextThenToken(token) => {
+                                self.input.next(); // consume command char
+                                self.input.next(); // consume following char
+                                return Some(token);
+                            }
+                            CommandResult::NotSimple => {} // Fall through to special handling
+                        }
+
+                        // Special commands that need state transitions or complex handling
                         match ch {
-                            'j' | 'k' => {
-                                self.input.next(); // Consume the command
-                                Some(Token::MoveVerticalBasic(i32::try_from(count).unwrap()))
-                            }
-                            'h' | 'l' => {
-                                self.input.next();
-                                Some(Token::MoveHorizontalBasic(i32::try_from(count).unwrap()))
-                            }
-                            'w' | 'W' | 'e' | 'E' | 'b' | 'B' => {
-                                self.input.next();
-                                Some(Token::MoveHorizontalChunk(i32::try_from(count).unwrap()))
-                            }
-                            'x' | 'J' => {
-                                self.input.next();
-                                Some(Token::TextManipulationBasic(i32::try_from(count).unwrap()))
-                            }
                             'G' => {
                                 self.input.next();
                                 Some(Token::JumpToLineNumber(accumulated))
@@ -758,16 +818,26 @@ impl<'a> Lexer<'a> {
                     return self.next_token(); // Recurse to process next
                 }
 
-                // Regular token processing
+                // Try simple command handling first
+                match Self::handle_simple_command(ch, 1) {
+                    CommandResult::Token(token) => return Some(token),
+                    CommandResult::ConsumeNextOptional(success, failure) => {
+                        return if self.input.next().is_some() {
+                            Some(success)
+                        } else {
+                            Some(failure)
+                        };
+                    }
+                    CommandResult::ConsumeNextThenToken(token) => {
+                        self.input.next();
+                        return Some(token);
+                    }
+                    CommandResult::NotSimple => {} // Fall through to special handling
+                }
+
+                // Special commands that need state transitions or complex handling
                 match ch {
-                    'j' | 'k' => Some(Token::MoveVerticalBasic(1)),
-                    'h' | 'l' => Some(Token::MoveHorizontalBasic(1)),
-                    'w' | 'W' | 'e' | 'E' | 'b' | 'B' => Some(Token::MoveHorizontalChunk(1)),
-                    'u' | 'U' => Some(Token::UndoRedo),
-                    '.' => Some(Token::DotRepeat),
-                    'M' | 'H' | 'L' => Some(Token::JumpToVertical),
-                    'p' | 'P' => Some(Token::YankPaste),
-                    'x' | 'J' => Some(Token::TextManipulationBasic(1)),
+                    '0' => Some(Token::MoveHorizontalBasic(1)), // Leading 0 is a motion, not count
                     'G' => Some(Token::JumpToLineNumber(String::new())),
                     'g' => {
                         // g-prefix commands: gj, gk, gg, gJ, g~, gu, gU
@@ -818,22 +888,6 @@ impl<'a> Lexer<'a> {
                             None => Some(Token::Unhandled("z".into())),
                         }
                     }
-                    'f' | 'F' | 't' | 'T' => {
-                        // These commands consume the next character as the target
-                        if self.input.next().is_some() {
-                            Some(Token::JumpToHorizontal)
-                        } else {
-                            Some(Token::Unhandled(ch.to_string()))
-                        }
-                    }
-                    'r' => {
-                        // Replace command consumes the next character
-                        if self.input.next().is_some() {
-                            Some(Token::TextManipulationBasic(1))
-                        } else {
-                            Some(Token::Unhandled("r".into()))
-                        }
-                    }
                     'd' => {
                         // Delete operator - enter operator pending state
                         self.state = State::OperatorPending {
@@ -857,26 +911,6 @@ impl<'a> Lexer<'a> {
                             count: 1,
                         };
                         self.next_token()
-                    }
-                    's' => {
-                        // s is alias for cl (substitute character)
-                        Some(Token::TextManipulationAdvanced)
-                    }
-                    'S' => {
-                        // S is alias for cc (substitute line)
-                        Some(Token::TextManipulationAdvanced)
-                    }
-                    'C' => {
-                        // C is alias for c$ (change to end of line)
-                        Some(Token::TextManipulationAdvanced)
-                    }
-                    'Y' => {
-                        // Y is alias for y$ (yank to end of line)
-                        Some(Token::YankPaste)
-                    }
-                    '%' => {
-                        // Jump to matching bracket (matchit)
-                        Some(Token::JumpFromContext)
                     }
                     '<' => {
                         // Try to parse control sequence
@@ -911,6 +945,11 @@ impl<'a> Lexer<'a> {
                         };
                         self.next_token()
                     }
+                    // Intentionally unhandled commands fall through here:
+                    // - Insert mode: o, O, i, I, a, A (enter insert mode - handled by game)
+                    // - Visual mode: v, V (future consideration per SPEC.md)
+                    // - Macros: q, @ (future consideration per SPEC.md)
+                    // See module-level documentation for full details.
                     _ => Some(Token::Unhandled(ch.into())),
                 }
             }
@@ -1636,6 +1675,124 @@ mod tests {
             lexer.next_token(),
             Some(Token::MoveVerticalBasic(1))
         ));
+    }
+
+    // Phase 1 - Single-Character Commands (D, X, ~)
+    #[test]
+    fn test_delete_to_end_of_line() {
+        let mut lexer = Lexer::new("D3D");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(3))));
+    }
+
+    #[test]
+    fn test_delete_char_before() {
+        let mut lexer = Lexer::new("X5X");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationBasic(1))
+        ));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationBasic(5))
+        ));
+    }
+
+    #[test]
+    fn test_toggle_case_single() {
+        let mut lexer = Lexer::new("~");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+    }
+
+    #[test]
+    fn test_toggle_case_multiple() {
+        let mut lexer = Lexer::new("~~");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+    }
+
+    // Phase 2 - Search Navigation Commands (n, N, ;, ,)
+    #[test]
+    fn test_search_repeat_n() {
+        let mut lexer = Lexer::new("n");
+        assert!(matches!(lexer.next_token(), Some(Token::SearchRepeat)));
+    }
+
+    #[test]
+    fn test_search_repeat_n_upper() {
+        let mut lexer = Lexer::new("N");
+        assert!(matches!(lexer.next_token(), Some(Token::SearchRepeat)));
+    }
+
+    #[test]
+    fn test_find_repeat_semicolon() {
+        let mut lexer = Lexer::new(";");
+        assert!(matches!(lexer.next_token(), Some(Token::SearchRepeat)));
+    }
+
+    #[test]
+    fn test_find_repeat_comma() {
+        let mut lexer = Lexer::new(",");
+        assert!(matches!(lexer.next_token(), Some(Token::SearchRepeat)));
+    }
+
+    #[test]
+    fn test_search_repeat_sequence() {
+        let mut lexer = Lexer::new("nN;,");
+        assert!(matches!(lexer.next_token(), Some(Token::SearchRepeat)));
+        assert!(matches!(lexer.next_token(), Some(Token::SearchRepeat)));
+        assert!(matches!(lexer.next_token(), Some(Token::SearchRepeat)));
+        assert!(matches!(lexer.next_token(), Some(Token::SearchRepeat)));
+    }
+
+    // Phase 3 - Mark Commands (m, ', `)
+    #[test]
+    fn test_mark_set() {
+        let mut lexer = Lexer::new("mamzmA");
+        assert!(matches!(lexer.next_token(), Some(Token::Marks)));
+        assert!(matches!(lexer.next_token(), Some(Token::Marks)));
+        assert!(matches!(lexer.next_token(), Some(Token::Marks)));
+    }
+
+    #[test]
+    fn test_mark_jump_line() {
+        let mut lexer = Lexer::new("'a'z");
+        assert!(matches!(lexer.next_token(), Some(Token::Marks)));
+        assert!(matches!(lexer.next_token(), Some(Token::Marks)));
+    }
+
+    #[test]
+    fn test_mark_jump_position() {
+        let mut lexer = Lexer::new("`a`z");
+        assert!(matches!(lexer.next_token(), Some(Token::Marks)));
+        assert!(matches!(lexer.next_token(), Some(Token::Marks)));
+    }
+
+    #[test]
+    fn test_mark_incomplete() {
+        let mut lexer = Lexer::new("m");
+        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "m"));
+    }
+
+    #[test]
+    fn test_mark_quote_incomplete() {
+        let mut lexer = Lexer::new("'");
+        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "'"));
+    }
+
+    #[test]
+    fn test_mark_backtick_incomplete() {
+        let mut lexer = Lexer::new("`");
+        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "`"));
     }
 
     //

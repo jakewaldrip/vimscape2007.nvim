@@ -66,6 +66,12 @@ pub enum Token {
     // // /[any characters] followed by <Esc> or |enter|
     CommandSearch(bool),
 
+    // // n, N (repeat last search), ;, , (repeat last f/F/t/T)
+    SearchRepeat,
+
+    // // m{char} (set mark), '{char} (jump to mark line), `{char} (jump to mark position)
+    Marks,
+
     // // d$, dw, etc, doubles up on every key, ie dww, d$$, etc
     // // If a number is included, it doubles the digits of the number
     // // [num doubled last digit](dww, d$$, dWW, dee, dEE, dbb, dBB, d$$, d^^, d00)

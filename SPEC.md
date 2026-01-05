@@ -299,8 +299,13 @@ The lexer should recognize and tokenize the following Vim commands:
 | `h`, `l` | `MoveHorizontalBasic(n)` | Yes |
 | `w`, `W`, `e`, `E`, `b`, `B` | `MoveHorizontalChunk(n)` | Yes |
 | `x` | `TextManipulationBasic(n)` | Yes |
+| `X` | `TextManipulationBasic(n)` | Yes |
+| `D` | `DeleteText(n)` | Yes |
+| `~` | `TextManipulationAdvanced` | No |
 | `u`, `U` | `UndoRedo` | No |
 | `.` | `DotRepeat` | No |
+| `n`, `N` | `SearchRepeat` | No |
+| `;`, `,` | `SearchRepeat` | No |
 | `M`, `H`, `L` | `JumpToVertical` | No |
 | `p`, `P` | `YankPaste` | No |
 | `J` | `TextManipulationBasic(n)` | Yes |
@@ -335,6 +340,9 @@ The lexer should recognize and tokenize the following Vim commands:
 | `r[char]` | `TextManipulationBasic(n)` |
 | `R[chars]<Esc>` | `TextManipulationAdvanced` |
 | `g~`, `gu`, `gU` + motion | `TextManipulationAdvanced` |
+| `m[char]` | `Marks` |
+| `'[char]` | `Marks` |
+| `` `[char] `` | `Marks` |
 
 #### Command Mode Sequences
 
@@ -407,16 +415,18 @@ pub enum Token {
     JumpFromContext,             // % (matchit)
     CameraMovement,              // zz, zb, zt, <C-E>, <C-Y>
     WindowManagement,            // <C-W>+key, <C-H/J/K/L>
-    TextManipulationBasic(i32),  // x, J, r+char with count
-    TextManipulationAdvanced,    // c, R, g~/u/U, text objects
+    TextManipulationBasic(i32),  // x, X, J, r+char with count
+    TextManipulationAdvanced,    // c, R, ~, g~/u/U, text objects
     YankPaste,                   // y, p, P, registers
     UndoRedo,                    // u, U, <C-R>
     DotRepeat,                   // .
     CommandSearch(bool),         // /, ? (bool = completed)
-    DeleteText(i32),             // d+motion with count
+    SearchRepeat,                // n, N, ;, , (repeat last search/find)
+    DeleteText(i32),             // d+motion, D with count
     Command(bool),               // : commands (bool = completed)
     HelpPage(bool),              // :h, :help (bool = completed)
     SaveFile(bool),              // :w (bool = completed)
+    Marks,                       // m{char}, '{char}, `{char}
     Unhandled(String),           // Fallback for unrecognized input
 }
 ```
@@ -468,6 +478,7 @@ pub enum Token {
 | `DotRepeat` | Finesse | 10 | |
 | `CommandSearch(true)` | Search | 10 | Completed |
 | `CommandSearch(false)` | Search | 1 | Escaped |
+| `SearchRepeat` | Search | 5 | n/N/;/, repeat |
 | `DeleteText(n)` | TextManipulation | 1 * n | Scaled by count |
 | `Command(true)` | Finesse | 10 | Generic commands |
 | `Command(false)` | Finesse | 1 | Escaped |
@@ -475,6 +486,7 @@ pub enum Token {
 | `HelpPage(false)` | Knowledge | 1 | Escaped |
 | `SaveFile(true)` | Saving | 10 | Completed |
 | `SaveFile(false)` | Saving | 1 | Escaped |
+| `Marks` | CodeFlow | 10 | m/'/` marks |
 | `Unhandled(_)` | - | 0 | No XP |
 
 ---
