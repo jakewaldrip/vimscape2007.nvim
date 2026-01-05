@@ -29,7 +29,9 @@ pub fn get_skill_data(conn: &Connection) -> Vec<SkillData> {
         }
     };
 
-    skill_data_iter.filter_map(|r| r.ok()).collect()
+    skill_data_iter
+        .filter_map(std::result::Result::ok)
+        .collect()
 }
 
 /// Creates the skills table and populates it with all skill types.
@@ -72,6 +74,7 @@ fn populate_skills_enum_table(conn: &Connection) -> bool {
 
 /// Writes XP updates to the database.
 /// Returns true on success, false on failure.
+#[cfg(test)]
 pub fn write_exp_to_table(conn: &Connection, skills: HashMap<String, i32>) -> bool {
     for (key, exp) in skills {
         if let Err(e) = conn.execute(
@@ -87,6 +90,7 @@ pub fn write_exp_to_table(conn: &Connection, skills: HashMap<String, i32>) -> bo
 
 /// Writes level updates to the database.
 /// Returns true on success, false on failure.
+#[cfg(test)]
 pub fn write_levels_to_table(conn: &Connection, levels_diff: &HashMap<String, i32>) -> bool {
     for (key, level) in levels_diff {
         if let Err(e) = conn.execute(
@@ -125,11 +129,13 @@ pub fn get_skill_details_from_db(conn: &Connection, skill_name: &str) -> Vec<Ski
         }
     };
 
-    skill_data_iter.filter_map(|r| r.ok()).collect()
+    skill_data_iter
+        .filter_map(std::result::Result::ok)
+        .collect()
 }
 
 /// Writes XP updates within an existing transaction.
-/// Uses prepare_cached for efficiency in loops.
+/// Uses `prepare_cached` for efficiency in loops.
 /// Returns true on success, false on failure.
 pub fn write_exp_to_table_tx(tx: &Transaction, skills: HashMap<String, i32>) -> bool {
     let mut stmt = match tx.prepare_cached("UPDATE skills SET exp = exp + ?1 WHERE name = ?2") {
@@ -151,7 +157,7 @@ pub fn write_exp_to_table_tx(tx: &Transaction, skills: HashMap<String, i32>) -> 
 }
 
 /// Writes level updates within an existing transaction.
-/// Uses prepare_cached for efficiency in loops.
+/// Uses `prepare_cached` for efficiency in loops.
 /// Returns true on success, false on failure.
 pub fn write_levels_to_table_tx(tx: &Transaction, levels_diff: &HashMap<String, i32>) -> bool {
     let mut stmt = match tx.prepare_cached("UPDATE skills SET level = ?1 WHERE name = ?2") {
@@ -210,7 +216,7 @@ mod tests {
 
         for skill in &skills {
             assert!(
-                expected_skills.iter().any(|s| *s == skill.skill_name),
+                expected_skills.contains(&skill.skill_name),
                 "Skill {} should be in expected list",
                 skill.skill_name
             );

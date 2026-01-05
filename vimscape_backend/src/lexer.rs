@@ -1088,7 +1088,6 @@ mod tests {
         assert!(lexer.next_token().is_none());
     }
 
-    // Phase 1 test cases
     #[test]
     fn test_horizontal_basic() {
         let mut lexer = Lexer::new("h5l");
@@ -1170,11 +1169,10 @@ mod tests {
     #[test]
     fn test_jump_to_line_g() {
         let mut lexer = Lexer::new("G10G");
-        assert!(matches!(lexer.next_token(), Some(Token::JumpToLineNumber(ref s)) if s == ""));
+        assert!(matches!(lexer.next_token(), Some(Token::JumpToLineNumber(ref s)) if s.is_empty()));
         assert!(matches!(lexer.next_token(), Some(Token::JumpToLineNumber(ref s)) if s == "10"));
     }
 
-    // Phase 2 test cases
     #[test]
     fn test_control_vertical_chunk() {
         let mut lexer = Lexer::new("<C-U><C-D>5<C-U>");
@@ -1232,7 +1230,6 @@ mod tests {
         assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "<"));
     }
 
-    // Phase 3 test cases
     #[test]
     fn test_g_vertical_movement() {
         let mut lexer = Lexer::new("gj5gk");
@@ -1249,7 +1246,7 @@ mod tests {
     #[test]
     fn test_gg_jump() {
         let mut lexer = Lexer::new("gg10gg");
-        assert!(matches!(lexer.next_token(), Some(Token::JumpToLineNumber(ref s)) if s == ""));
+        assert!(matches!(lexer.next_token(), Some(Token::JumpToLineNumber(ref s)) if s.is_empty()));
         assert!(matches!(lexer.next_token(), Some(Token::JumpToLineNumber(ref s)) if s == "10"));
     }
 
@@ -1298,7 +1295,6 @@ mod tests {
         assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "z"));
     }
 
-    // Phase 4 test cases
     #[test]
     fn test_jump_horizontal_f() {
         let mut lexer = Lexer::new("fa");
@@ -1338,7 +1334,6 @@ mod tests {
         assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "r"));
     }
 
-    // Phase 5 test cases - Operator-Pending Commands (d, y, c)
     #[test]
     fn test_delete_line() {
         let mut lexer = Lexer::new("dd3dd");
@@ -1463,7 +1458,6 @@ mod tests {
         assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
     }
 
-    // Phase 6 test cases - Command Mode Sequences
     #[test]
     fn test_search_completed() {
         let mut lexer = Lexer::new("/test|enter|");
@@ -1524,7 +1518,6 @@ mod tests {
         assert!(matches!(lexer.next_token(), Some(Token::Command(true))));
     }
 
-    // Phase 7 test cases - Replace Mode and Advanced Text Manipulation
     #[test]
     fn test_replace_mode() {
         let mut lexer = Lexer::new("Rtest|escape|");
@@ -1611,7 +1604,6 @@ mod tests {
         assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "gu"));
     }
 
-    // Phase 8 test cases - Special Sequences and Edge Cases
     #[test]
     fn test_jump_from_context() {
         let mut lexer = Lexer::new("%");
@@ -1658,7 +1650,6 @@ mod tests {
         ));
     }
 
-    // Phase 1 - Single-Character Commands (D, X, ~)
     #[test]
     fn test_delete_to_end_of_line() {
         let mut lexer = Lexer::new("D3D");
@@ -1701,7 +1692,6 @@ mod tests {
         ));
     }
 
-    // Phase 2 - Search Navigation Commands (n, N, ;, ,)
     #[test]
     fn test_search_repeat_n() {
         let mut lexer = Lexer::new("n");
@@ -1735,7 +1725,6 @@ mod tests {
         assert!(matches!(lexer.next_token(), Some(Token::SearchRepeat)));
     }
 
-    // Phase 3 - Mark Commands (m, ', `)
     #[test]
     fn test_mark_set() {
         let mut lexer = Lexer::new("mamzmA");
