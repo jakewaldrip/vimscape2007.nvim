@@ -34,7 +34,7 @@ pub fn parse_action_into_skill(token: &Token) -> Option<Skills> {
             let base_experience = 10;
             Some(Skills::VerticalNavigation(base_experience))
         }
-        Token::JumpFromContext => {
+        Token::JumpFromContext | Token::Marks => {
             let base_experience = 10;
             Some(Skills::CodeFlow(base_experience))
         }
@@ -78,6 +78,10 @@ pub fn parse_action_into_skill(token: &Token) -> Option<Skills> {
         Token::SaveFile(was_command_escaped) => {
             let base_experience = if *was_command_escaped { 1 } else { 10 };
             Some(Skills::Saving(base_experience))
+        }
+        Token::SearchRepeat => {
+            let base_experience = 5;
+            Some(Skills::Search(base_experience))
         }
         Token::Unhandled(token) => {
             println!("Unhandled token: {token}");

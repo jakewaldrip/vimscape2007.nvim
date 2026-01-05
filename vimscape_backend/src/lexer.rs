@@ -52,6 +52,16 @@ enum State {
     CaseOperatorPending { operator: String, count: u32 }, // "g~", "gu", "gU"
 }
 
+/// Result of handling a simple command character
+enum CommandResult {
+    /// Return this token immediately
+    Token(Token),
+    /// Need to consume next char, if present return first token, else second
+    ConsumeNextOptional(Token, Token),
+    /// Not a simple command - needs special handling
+    NotSimple,
+}
+
 pub struct Lexer<'a> {
     input: Peekable<Chars<'a>>,
     state: State,
@@ -290,18 +300,6 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    /// Result of handling a simple command character
-    enum CommandResult {
-        /// Return this token immediately
-        Token(Token),
-        /// Need to consume next char, then return token
-        ConsumeNextThenToken(Token),
-        /// Need to consume next char, if present return first token, else second
-        ConsumeNextOptional(Token, Token),
-        /// Not a simple command - needs special handling
-        NotSimple,
-    }
-
     /// Handles simple command characters that can work with a count.
     /// Returns Some(CommandResult) for commands that can be handled simply,
     /// None for commands that need special state handling.
@@ -316,17 +314,11 @@ impl<'a> Lexer<'a> {
             'u' | 'U' => CommandResult::Token(Token::UndoRedo),
             '.' => CommandResult::Token(Token::DotRepeat),
             'M' | 'H' | 'L' => CommandResult::Token(Token::JumpToVertical),
-            'p' | 'P' => CommandResult::Token(Token::YankPaste),
-            'x' | 'J' => CommandResult::Token(Token::TextManipulationBasic(count_i32)),
-            'X' => CommandResult::Token(Token::TextManipulationBasic(count_i32)),
+            'p' | 'P' | 'Y' => CommandResult::Token(Token::YankPaste),
+            'x' | 'J' | 'X' => CommandResult::Token(Token::TextManipulationBasic(count_i32)),
             'D' => CommandResult::Token(Token::DeleteText(count_i32)),
-            's' => CommandResult::Token(Token::TextManipulationAdvanced),
-            'S' => CommandResult::Token(Token::TextManipulationAdvanced),
-            'C' => CommandResult::Token(Token::TextManipulationAdvanced),
-            'Y' => CommandResult::Token(Token::YankPaste),
-            '~' => CommandResult::Token(Token::TextManipulationAdvanced),
-            'n' | 'N' => CommandResult::Token(Token::SearchRepeat),
-            ';' | ',' => CommandResult::Token(Token::SearchRepeat),
+            's' | 'S' | 'C' | '~' => CommandResult::Token(Token::TextManipulationAdvanced),
+            'n' | 'N' | ';' | ',' => CommandResult::Token(Token::SearchRepeat),
             '%' => CommandResult::Token(Token::JumpFromContext),
             'f' | 'F' | 't' | 'T' => CommandResult::ConsumeNextOptional(
                 Token::JumpToHorizontal,
@@ -337,9 +329,7 @@ impl<'a> Lexer<'a> {
                 Token::Unhandled("r".into()),
             ),
             'm' => CommandResult::ConsumeNextOptional(Token::Marks, Token::Unhandled("m".into())),
-            '\'' => {
-                CommandResult::ConsumeNextOptional(Token::Marks, Token::Unhandled("'".into()))
-            }
+            '\'' => CommandResult::ConsumeNextOptional(Token::Marks, Token::Unhandled("'".into())),
             '`' => CommandResult::ConsumeNextOptional(Token::Marks, Token::Unhandled("`".into())),
             _ => CommandResult::NotSimple,
         }
@@ -490,7 +480,7 @@ impl<'a> Lexer<'a> {
     }
 
     /// Handle case operator with a motion character.
-    /// Note: count is not used here because TextManipulationAdvanced doesn't carry count info.
+    /// Note: count is not used here because `TextManipulationAdvanced` doesn't carry count info.
     /// The motion itself (not the case operator) determines the range.
     fn handle_case_operator_char_motion(&mut self, operator: &str, ch: char) -> Token {
         match ch {
@@ -538,7 +528,7 @@ impl<'a> Lexer<'a> {
     }
 
     /// Handle case operator with accumulated motion count
-    fn handle_case_operator_with_motion(&mut self, operator: &str, count: u32) -> Token {
+    fn handle_case_operator_with_motion(&mut self, operator: &str, _count: u32) -> Token {
         if let Some(ch) = self.input.next() {
             self.handle_case_operator_char_motion(operator, ch)
         } else {
@@ -677,11 +667,6 @@ impl<'a> Lexer<'a> {
                                 } else {
                                     Some(failure)
                                 };
-                            }
-                            CommandResult::ConsumeNextThenToken(token) => {
-                                self.input.next(); // consume command char
-                                self.input.next(); // consume following char
-                                return Some(token);
                             }
                             CommandResult::NotSimple => {} // Fall through to special handling
                         }
@@ -828,16 +813,12 @@ impl<'a> Lexer<'a> {
                             Some(failure)
                         };
                     }
-                    CommandResult::ConsumeNextThenToken(token) => {
-                        self.input.next();
-                        return Some(token);
-                    }
                     CommandResult::NotSimple => {} // Fall through to special handling
                 }
 
                 // Special commands that need state transitions or complex handling
                 match ch {
-                    '0' => Some(Token::MoveHorizontalBasic(1)), // Leading 0 is a motion, not count
+                    '0' => Some(Token::Unhandled("0".into())), // Line start motion - not tracked
                     'G' => Some(Token::JumpToLineNumber(String::new())),
                     'g' => {
                         // g-prefix commands: gj, gk, gg, gJ, g~, gu, gU
