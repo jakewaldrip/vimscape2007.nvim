@@ -58,6 +58,9 @@ enum CommandResult {
     Token(Token),
     /// Need to consume next char, if present return first token, else second
     ConsumeNextOptional(Token, Token),
+    /// Need to try consuming a suffix sequence (for Neovim transformations)
+    /// If suffix matches, return the token. If not, still return the token.
+    ConsumeNeovimSuffix(Token, &'static str),
     /// Not a simple command - needs special handling
     NotSimple,
 }
@@ -225,12 +228,19 @@ impl<'a> Lexer<'a> {
     }
 
     /// Classify command content and return appropriate token.
-    fn classify_command(content: &str, completed: bool) -> Token {
+    /// Returns `(Token, is_matchit)` tuple.
+    fn classify_command(content: &str, completed: bool) -> (Token, bool) {
         let trimmed = content.trim();
+
+        // Check for matchit (% command via Neovim's matchit plugin)
+        // Pattern: <C-U>call matchit#Match_wrapper('',1,'n')
+        if trimmed.contains("matchit#Match_wrapper") {
+            return (Token::JumpFromContext, true);
+        }
 
         // Check for line number: all digits
         if !trimmed.is_empty() && trimmed.chars().all(|c| c.is_ascii_digit()) {
-            return Token::JumpToLineNumber(trimmed.to_string());
+            return (Token::JumpToLineNumber(trimmed.to_string()), false);
         }
 
         // Check for help: starts with 'h' or 'help'
@@ -239,16 +249,16 @@ impl<'a> Lexer<'a> {
             || trimmed == "help"
             || trimmed.starts_with("help ")
         {
-            return Token::HelpPage(completed);
+            return (Token::HelpPage(completed), false);
         }
 
         // Check for save: 'w' or 'w ' (write)
         if trimmed == "w" || trimmed.starts_with("w ") || trimmed.starts_with("w!") {
-            return Token::SaveFile(completed);
+            return (Token::SaveFile(completed), false);
         }
 
         // Generic command
-        Token::Command(completed)
+        (Token::Command(completed), false)
     }
 
     fn accumulate_digit(&mut self, digit: char) -> u32 {
@@ -315,9 +325,16 @@ impl<'a> Lexer<'a> {
             '.' => CommandResult::Token(Token::DotRepeat),
             'M' | 'H' | 'L' => CommandResult::Token(Token::JumpToVertical),
             'p' | 'P' | 'Y' => CommandResult::Token(Token::YankPaste),
-            'x' | 'J' | 'X' => CommandResult::Token(Token::TextManipulationBasic(count_i32)),
+            // Neovim sends x as xdl
+            'x' => {
+                CommandResult::ConsumeNeovimSuffix(Token::TextManipulationBasic(count_i32), "dl")
+            }
+            'J' | 'X' => CommandResult::Token(Token::TextManipulationBasic(count_i32)),
             'D' => CommandResult::Token(Token::DeleteText(count_i32)),
-            's' | 'S' | 'C' | '~' => CommandResult::Token(Token::TextManipulationAdvanced),
+            // Neovim sends s as scl, S as Scc
+            's' => CommandResult::ConsumeNeovimSuffix(Token::TextManipulationAdvanced, "cl"),
+            'S' => CommandResult::ConsumeNeovimSuffix(Token::TextManipulationAdvanced, "cc"),
+            'C' | '~' => CommandResult::Token(Token::TextManipulationAdvanced),
             'n' | 'N' | ';' | ',' => CommandResult::Token(Token::SearchRepeat),
             '%' => CommandResult::Token(Token::JumpFromContext),
             'f' | 'F' | 't' | 'T' => CommandResult::ConsumeNextOptional(
@@ -333,6 +350,70 @@ impl<'a> Lexer<'a> {
             '`' => CommandResult::ConsumeNextOptional(Token::Marks, Token::Unhandled("`".into())),
             _ => CommandResult::NotSimple,
         }
+    }
+
+    // =========================================================================
+    // Neovim Transformation Helpers
+    // =========================================================================
+    // Neovim sends certain key sequences differently than expected.
+    // These helpers consume the extra characters from these transformations.
+
+    /// Try to consume a specific sequence of characters if present.
+    /// Used for handling Neovim's key transformations (e.g., `zz` sent as `zzz`).
+    /// Returns true if the sequence was found and consumed.
+    fn try_consume_sequence(&mut self, expected: &str) -> bool {
+        // Clone the iterator to peek ahead without consuming
+        let mut peek_iter = self.input.clone();
+
+        // Check if all expected characters match
+        for expected_ch in expected.chars() {
+            match peek_iter.next() {
+                Some(ch) if ch == expected_ch => {}
+                _ => return false,
+            }
+        }
+
+        // All characters matched - consume them from the real iterator
+        for _ in expected.chars() {
+            self.input.next();
+        }
+        true
+    }
+
+    /// Consume Neovim's text object suffix pattern.
+    /// For `ciw`, Neovim sends `ciwwiw` - this consumes the `wiw` suffix.
+    /// For `ci)`, Neovim sends `ci))<C-\><C-N>zvzvv` - this consumes the `)` + escape sequence.
+    fn try_consume_text_object_suffix(&mut self, inner_or_around: char, obj_ch: char) {
+        // For word-like text objects: ciw -> ciwwiw, caw -> cawwaw
+        // Pattern is: obj_ch + inner_or_around + obj_ch
+        if matches!(obj_ch, 'w' | 'W' | 's' | 'p') {
+            let suffix: String = [obj_ch, inner_or_around, obj_ch].iter().collect();
+            self.try_consume_sequence(&suffix);
+            return;
+        }
+
+        // For bracket/paren text objects: ci) -> ci))<C-\><C-N>zvzvv
+        // Pattern is: obj_ch + <C-\><C-N>zvzvv
+        if matches!(
+            obj_ch,
+            '(' | ')' | 'b' | '{' | '}' | 'B' | '[' | ']' | '<' | '>'
+        ) {
+            // First consume the doubled bracket
+            if self.input.peek() == Some(&obj_ch) {
+                self.input.next();
+            }
+            // Then consume the escape sequence <C-\><C-N>zvzvv
+            self.try_consume_sequence("<C-\\><C-N>zvzvv");
+            return;
+        }
+
+        // For quote text objects: ci" -> ci"" (just doubled)
+        if matches!(obj_ch, '\'' | '"' | '`') && self.input.peek() == Some(&obj_ch) {
+            self.input.next();
+        }
+
+        // For tag text object: cit -> potentially has different pattern
+        // Not documented in token.rs, skip for now
     }
 
     /// Check if a character is a valid text object specifier
@@ -361,6 +442,10 @@ impl<'a> Lexer<'a> {
         let is_doubled = ch == Self::operator_to_char(operator);
 
         if is_doubled {
+            // Neovim sends yy as yyy - consume the extra y
+            if matches!(operator, Operator::Yank) {
+                self.try_consume_sequence("y");
+            }
             return Self::operator_to_token(operator, count);
         }
 
@@ -390,6 +475,8 @@ impl<'a> Lexer<'a> {
             if let Some(&obj_ch) = self.input.peek() {
                 if Self::is_text_object_char(obj_ch) {
                     self.input.next(); // consume the object char
+                                       // Consume Neovim's text object suffix
+                    self.try_consume_text_object_suffix(ch, obj_ch);
                     return Self::operator_to_token(operator, count);
                 }
             }
@@ -403,7 +490,12 @@ impl<'a> Lexer<'a> {
     fn handle_operator_char_motion(&mut self, operator: Operator, count: u32, ch: char) -> Token {
         match ch {
             // Word/chunk motions, line position motions, basic movements
+            // Neovim doubles the motion char: dw -> dww, d$ -> d$$, etc.
             'w' | 'W' | 'e' | 'E' | 'b' | 'B' | '$' | '^' | '0' | 'j' | 'k' | 'h' | 'l' => {
+                // Consume doubled motion character (Neovim transformation)
+                if self.input.peek() == Some(&ch) {
+                    self.input.next();
+                }
                 Self::operator_to_token(operator, count)
             }
             // Find char motions (consume target char)
@@ -485,7 +577,12 @@ impl<'a> Lexer<'a> {
     fn handle_case_operator_char_motion(&mut self, operator: &str, ch: char) -> Token {
         match ch {
             // Word/chunk motions, line position motions, basic movements
+            // Neovim doubles the motion char: guw -> guww, gu$ -> gu$$, etc.
             'w' | 'W' | 'e' | 'E' | 'b' | 'B' | '$' | '^' | '0' | 'j' | 'k' | 'h' | 'l' => {
+                // Consume doubled motion character (Neovim transformation)
+                if self.input.peek() == Some(&ch) {
+                    self.input.next();
+                }
                 Token::TextManipulationAdvanced
             }
             // Find char motions (consume target char)
@@ -517,6 +614,8 @@ impl<'a> Lexer<'a> {
                 if let Some(&obj_ch) = self.input.peek() {
                     if Self::is_text_object_char(obj_ch) {
                         self.input.next(); // consume the object char
+                                           // Consume Neovim's text object suffix
+                        self.try_consume_text_object_suffix(ch, obj_ch);
                         return Token::TextManipulationAdvanced;
                     }
                 }
@@ -585,7 +684,12 @@ impl<'a> Lexer<'a> {
                 if let Some(completed) = self.check_command_terminator() {
                     self.state = State::None;
                     if mode_type == 0 {
-                        return Some(Self::classify_command(&content, completed));
+                        let (token, is_matchit) = Self::classify_command(&content, completed);
+                        if is_matchit {
+                            // Consume the m'zv suffix that Neovim adds after matchit
+                            self.try_consume_sequence("m'zv");
+                        }
+                        return Some(token);
                     }
                     return Some(Token::CommandSearch(completed));
                 }
@@ -668,6 +772,11 @@ impl<'a> Lexer<'a> {
                                     Some(failure)
                                 };
                             }
+                            CommandResult::ConsumeNeovimSuffix(token, suffix) => {
+                                self.input.next(); // consume command char
+                                self.try_consume_sequence(suffix);
+                                return Some(token);
+                            }
                             CommandResult::NotSimple => {} // Fall through to special handling
                         }
 
@@ -719,8 +828,14 @@ impl<'a> Lexer<'a> {
                             'z' => {
                                 self.input.next(); // consume 'z'
                                                    // z-prefix commands (no numeric prefix support per spec)
+                                                   // Note: Neovim sends zz as zzz
                                 match self.input.next() {
-                                    Some('z' | 't' | 'b') => Some(Token::CameraMovement),
+                                    Some('z') => {
+                                        // Neovim sends zz as zzz - consume the extra z
+                                        self.try_consume_sequence("z");
+                                        Some(Token::CameraMovement)
+                                    }
+                                    Some('t' | 'b') => Some(Token::CameraMovement),
                                     Some(ch) => Some(Token::Unhandled(format!("z{ch}"))),
                                     None => Some(Token::Unhandled("z".into())),
                                 }
@@ -779,6 +894,29 @@ impl<'a> Lexer<'a> {
                                     Some(Token::Unhandled(accumulated))
                                 }
                             }
+                            '"' => {
+                                self.input.next(); // consume first "
+                                                   // Neovim register prefix with count: 3""3p, 3""3P
+                                if self.input.peek() == Some(&'"') {
+                                    self.input.next(); // consume second "
+                                                       // Consume digit(s) if present
+                                    while let Some(&dch) = self.input.peek() {
+                                        if dch.is_ascii_digit() {
+                                            self.input.next();
+                                        } else {
+                                            break;
+                                        }
+                                    }
+                                    // Check for p or P
+                                    match self.input.next() {
+                                        Some('p' | 'P') => Some(Token::YankPaste),
+                                        Some(c) => Some(Token::Unhandled(format!("\"\"{c}"))),
+                                        None => Some(Token::Unhandled("\"\"".into())),
+                                    }
+                                } else {
+                                    Some(Token::Unhandled("\"".into()))
+                                }
+                            }
                             _ => {
                                 // Not a command we handle with counts
                                 Some(Token::Unhandled(accumulated))
@@ -812,6 +950,10 @@ impl<'a> Lexer<'a> {
                         } else {
                             Some(failure)
                         };
+                    }
+                    CommandResult::ConsumeNeovimSuffix(token, suffix) => {
+                        self.try_consume_sequence(suffix);
+                        return Some(token);
                     }
                     CommandResult::NotSimple => {} // Fall through to special handling
                 }
@@ -863,8 +1005,14 @@ impl<'a> Lexer<'a> {
                     }
                     'z' => {
                         // z-prefix commands: zz, zt, zb
+                        // Note: Neovim sends zz as zzz
                         match self.input.next() {
-                            Some('z' | 't' | 'b') => Some(Token::CameraMovement),
+                            Some('z') => {
+                                // Neovim sends zz as zzz - consume the extra z
+                                self.try_consume_sequence("z");
+                                Some(Token::CameraMovement)
+                            }
+                            Some('t' | 'b') => Some(Token::CameraMovement),
                             Some(ch) => Some(Token::Unhandled(format!("z{ch}"))),
                             None => Some(Token::Unhandled("z".into())),
                         }
@@ -925,6 +1073,29 @@ impl<'a> Lexer<'a> {
                             content: String::new(),
                         };
                         self.next_token()
+                    }
+                    '"' => {
+                        // Neovim register prefix: ""1p, ""1P (for paste commands)
+                        // Also handles numbered registers with counts like 3""3p
+                        if self.input.peek() == Some(&'"') {
+                            self.input.next(); // consume second "
+                                               // Consume digit(s) if present
+                            while let Some(&ch) = self.input.peek() {
+                                if ch.is_ascii_digit() {
+                                    self.input.next();
+                                } else {
+                                    break;
+                                }
+                            }
+                            // Check for p or P
+                            match self.input.next() {
+                                Some('p' | 'P') => Some(Token::YankPaste),
+                                Some(ch) => Some(Token::Unhandled(format!("\"\"{ch}"))),
+                                None => Some(Token::Unhandled("\"\"".into())),
+                            }
+                        } else {
+                            Some(Token::Unhandled("\"".into()))
+                        }
                     }
                     // Intentionally unhandled commands fall through here:
                     // - Insert mode: o, O, i, I, a, A (enter insert mode - handled by game)
@@ -1265,10 +1436,37 @@ mod tests {
 
     #[test]
     fn test_z_camera_movement() {
-        let mut lexer = Lexer::new("zzztzb");
+        // Test zt and zb (these don't have Neovim transformations)
+        let mut lexer = Lexer::new("ztzb");
         assert!(matches!(lexer.next_token(), Some(Token::CameraMovement)));
         assert!(matches!(lexer.next_token(), Some(Token::CameraMovement)));
+    }
+
+    #[test]
+    fn test_zz_neovim_format() {
+        // Neovim sends zz as zzz
+        let mut lexer = Lexer::new("zzz");
         assert!(matches!(lexer.next_token(), Some(Token::CameraMovement)));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_zz_multiple_neovim_format() {
+        // Two zz commands: Neovim sends as zzzzzz (6 z's)
+        let mut lexer = Lexer::new("zzzzzz");
+        assert!(matches!(lexer.next_token(), Some(Token::CameraMovement)));
+        assert!(matches!(lexer.next_token(), Some(Token::CameraMovement)));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_zz_mixed_neovim_format() {
+        // zz then zt then zb: Neovim sends zzz then zt then zb
+        let mut lexer = Lexer::new("zzzztzb");
+        assert!(matches!(lexer.next_token(), Some(Token::CameraMovement))); // zzz
+        assert!(matches!(lexer.next_token(), Some(Token::CameraMovement))); // zt
+        assert!(matches!(lexer.next_token(), Some(Token::CameraMovement))); // zb
+        assert!(lexer.next_token().is_none());
     }
 
     #[test]
@@ -1352,10 +1550,11 @@ mod tests {
 
     #[test]
     fn test_yank() {
-        let mut lexer = Lexer::new("yyywy$");
+        // Test yw and y$ (non-Neovim-transformed yank commands)
+        let mut lexer = Lexer::new("ywy$");
         assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
         assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
-        assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
+        assert!(lexer.next_token().is_none());
     }
 
     #[test]
@@ -1930,4 +2129,282 @@ mod tests {
     // fn gracefully_handles_commands_with_space() {
     //     const TEST_INPUT: &str = ":Vimscape toggle<Esc>";
     // }
+
+    // =========================================================================
+    // Neovim Transformation Tests
+    // =========================================================================
+    // These tests verify that the lexer correctly handles Neovim's key
+    // transformations, where certain commands are sent differently than
+    // the canonical Vim representation.
+
+    #[test]
+    fn test_x_neovim_format() {
+        // Neovim sends x as xdl
+        let mut lexer = Lexer::new("xdl");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationBasic(1))
+        ));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_x_with_count_neovim_format() {
+        // Neovim sends 5x as 5xdl
+        let mut lexer = Lexer::new("5xdl");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationBasic(5))
+        ));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_s_neovim_format() {
+        // Neovim sends s as scl
+        let mut lexer = Lexer::new("scl");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_s_uppercase_neovim_format() {
+        // Neovim sends S as Scc
+        let mut lexer = Lexer::new("Scc");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_x_and_s_mixed_neovim_format() {
+        // Sequence: x then s (Neovim sends as xdlscl)
+        let mut lexer = Lexer::new("xdlscl");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationBasic(1))
+        ));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_paste_neovim_format() {
+        // Neovim sends p as ""1p
+        let mut lexer = Lexer::new("\"\"1p");
+        assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_paste_uppercase_neovim_format() {
+        // Neovim sends P as ""1P
+        let mut lexer = Lexer::new("\"\"1P");
+        assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_paste_with_count_neovim_format() {
+        // Neovim sends 3p as 3""3p
+        let mut lexer = Lexer::new("3\"\"3p");
+        assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_yy_neovim_format() {
+        // Neovim sends yy as yyy
+        let mut lexer = Lexer::new("yyy");
+        assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_yy_multiple_neovim_format() {
+        // Two yy commands: Neovim sends as yyyyyy (6 y's)
+        let mut lexer = Lexer::new("yyyyyy");
+        assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
+        assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_yy_with_count_neovim_format() {
+        // Neovim sends 3yy as 3yyy
+        let mut lexer = Lexer::new("3yyy");
+        assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_delete_word_neovim_format() {
+        // Neovim sends dw as dww
+        let mut lexer = Lexer::new("dww");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_delete_end_neovim_format() {
+        // Neovim sends d$ as d$$
+        let mut lexer = Lexer::new("d$$");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_delete_various_motions_neovim_format() {
+        // Test all doubled motions: dWW, dee, dEE, dbb, dBB
+        let mut lexer = Lexer::new("dWWdeedEEdbbdBB");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1)))); // dWW
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1)))); // dee
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1)))); // dEE
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1)))); // dbb
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1)))); // dBB
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_change_word_neovim_format() {
+        // Neovim sends cw as cww
+        let mut lexer = Lexer::new("cww");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_change_end_neovim_format() {
+        // Neovim sends c$ as c$$
+        let mut lexer = Lexer::new("c$$");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_case_operator_neovim_format() {
+        // Neovim sends guw as guww, gu$ as gu$$
+        let mut lexer = Lexer::new("guwwgu$$");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        )); // guww
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        )); // gu$$
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_change_inner_word_neovim_format() {
+        // Neovim sends ciw as ciwwiw
+        let mut lexer = Lexer::new("ciwwiw");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_change_around_word_neovim_format() {
+        // Neovim sends caw as cawwaw
+        let mut lexer = Lexer::new("cawwaw");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_delete_inner_word_neovim_format() {
+        // Neovim sends diw as diwwiw
+        let mut lexer = Lexer::new("diwwiw");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_change_inner_paren_neovim_format() {
+        // Neovim sends ci) as ci))<C-\><C-N>zvzvv
+        let mut lexer = Lexer::new("ci))<C-\\><C-N>zvzvv");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_change_inner_brace_neovim_format() {
+        // Neovim sends ci{ as ci{{<C-\><C-N>zvzvv
+        let mut lexer = Lexer::new("ci{{<C-\\><C-N>zvzvv");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_change_inner_bracket_neovim_format() {
+        // Neovim sends ci[ as ci[[<C-\><C-N>zvzvv
+        let mut lexer = Lexer::new("ci[[<C-\\><C-N>zvzvv");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_multiple_text_objects_neovim_format() {
+        // Test ciw then caw in sequence
+        let mut lexer = Lexer::new("ciwwiwcawwaw");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        )); // ciwwiw
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        )); // cawwaw
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_matchit_percent_neovim_format() {
+        // Neovim sends % as :<C-U>call matchit#Match_wrapper('',1,'n')|enter|m'zv
+        let mut lexer = Lexer::new(":<C-U>call matchit#Match_wrapper('',1,'n')|enter|m'zv");
+        assert!(matches!(lexer.next_token(), Some(Token::JumpFromContext)));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_matchit_with_following_command() {
+        // Test matchit followed by another command
+        let mut lexer = Lexer::new(":<C-U>call matchit#Match_wrapper('',1,'n')|enter|m'zvj");
+        assert!(matches!(lexer.next_token(), Some(Token::JumpFromContext)));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::MoveVerticalBasic(1))
+        ));
+        assert!(lexer.next_token().is_none());
+    }
 }
