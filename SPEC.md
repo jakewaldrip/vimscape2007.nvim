@@ -445,9 +445,9 @@ pub enum Token {
 
 | Skill | Description | Associated Tokens |
 |-------|-------------|-------------------|
-| `VerticalNavigation` | Up/down movement | `MoveVerticalBasic`, `MoveVerticalChunk` |
-| `HorizontalNavigation` | Left/right movement | `MoveHorizontalBasic`, `MoveHorizontalChunk` |
-| `CodeFlow` | Jumping to locations | `JumpToHorizontal`, `JumpToLineNumber`, `JumpToVertical`, `JumpFromContext` |
+| `VerticalNavigation` | Up/down movement | `MoveVerticalBasic`, `MoveVerticalChunk`, `JumpToLineNumber`, `JumpToVertical` |
+| `HorizontalNavigation` | Left/right movement | `MoveHorizontalBasic`, `MoveHorizontalChunk`, `JumpToHorizontal` |
+| `CodeFlow` | Jumping to locations | `JumpFromContext`, `Marks` |
 | `CameraMovement` | Viewport scrolling | `CameraMovement` |
 | `WindowManagement` | Window/split operations | `WindowManagement` |
 | `TextManipulation` | Text editing | `TextManipulationBasic`, `TextManipulationAdvanced` |
@@ -620,7 +620,8 @@ A cursor-relative popup showing detailed skill information:
 ```lua
 {
     db_path = plugin_directory .. "/",  -- Plugin's own directory
-    batch_size = 50,
+    db_name = "vimscape.db",            -- Database filename
+    batch_size = 1000,
     log_level = vim.log.levels.INFO,    -- Integer log level
     batch_notify = false
 }
@@ -631,11 +632,12 @@ A cursor-relative popup showing detailed skill information:
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `db_path` | string | Plugin directory | Directory for SQLite database |
-| `batch_size` | number | 50 | Keystrokes before processing batch |
+| `db_name` | string | `"vimscape.db"` | Database filename |
+| `batch_size` | number | 1000 | Keystrokes before processing batch |
 | `log_level` | integer | `vim.log.levels.INFO` | Minimum log level for notifications |
 | `batch_notify` | boolean | false | Show notification after each batch |
 
-**Note:** The database file is stored as `teste.db` within the configured `db_path` directory.
+**Note:** The full database path is constructed as `db_path .. db_name`.
 
 ### Setup Example
 
@@ -681,4 +683,3 @@ This compiles the Rust backend and copies `libvimscape_backend.so` to `lua/vimsc
 3. **Visual Mode**: Currently not tracked
 4. **Macro Recording**: Could track `q` register usage
 5. **Register Access**: Full support for `"[reg]` prefix patterns
-6. **Database Filename**: Consider making the database filename configurable (currently hardcoded as `teste.db`)

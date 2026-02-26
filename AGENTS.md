@@ -231,7 +231,7 @@ The lexer uses a state machine with states:
 
 - SQLite via rusqlite
 - Single `skills` table with: id, name, exp, level
-- Database file: `teste.db` in configured path
+- Database file: `vimscape.db` (configurable via `db_name`) in configured `db_path`
 
 ## Important Files to Reference
 

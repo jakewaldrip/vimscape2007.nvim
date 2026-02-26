@@ -7,8 +7,14 @@ local config = require("config")
 
 local ns = vim.api.nvim_create_namespace("vimscape_keys")
 
+---Returns the full path to the database file
+---@return string
+local function get_db_full_path()
+	return config.db_path .. config.db_name
+end
+
 local record_key = function(key)
-	keys.record_keys(key, config.db_path, config.batch_size, config)
+	keys.record_keys(key, get_db_full_path(), config.batch_size, config)
 end
 
 ---@class Vimscape2007
@@ -26,7 +32,7 @@ M.setup = function(opts)
 	end
 
 	config = vim.tbl_deep_extend("force", config, opts or {})
-	vimscape.setup_tables(config.db_path)
+	vimscape.setup_tables(get_db_full_path())
 
 	M.create_user_commands()
 end
@@ -65,7 +71,7 @@ M.show_data = function()
 
 	local stat_config = window_config.stat_window_config()
 	local bufr_width = stat_config.width
-	local user_data = vimscape.get_user_data(bufr_width, config.db_path)
+	local user_data = vimscape.get_user_data(bufr_width, get_db_full_path())
 
 	vim.api.nvim_open_win(window_config.vimscape_stats_bufnr, true, stat_config)
 	vim.api.nvim_buf_set_lines(window_config.vimscape_stats_bufnr, 0, -1, false, {})
@@ -82,7 +88,7 @@ M.show_details = function(word)
 
 	vim.keymap.set("n", "q", ":q<CR>", { silent = true, buffer = window_config.vimscape_details_bufnr })
 
-	local details_data = vimscape.get_skill_details(word, config.db_path)
+	local details_data = vimscape.get_skill_details(word, get_db_full_path())
 
 	local details_config = window_config.details_window_config()
 	details_config.title = word
