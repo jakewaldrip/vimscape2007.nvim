@@ -24,6 +24,10 @@ pub fn process_batch((input, db_path): (String, String)) -> bool {
     let mut skills: HashMap<String, i32> = HashMap::new();
     let logging = token_log::is_enabled();
 
+    if logging {
+        token_log::log_batch(&input);
+    }
+
     while let Some(token) = lexer.next_token() {
         if logging {
             token_log::log_token(&token);

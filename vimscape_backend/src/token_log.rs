@@ -60,3 +60,21 @@ pub fn log_token(token: &Token) {
 
     let _ = writeln!(file, "Token: {token:?}");
 }
+
+pub fn log_batch(input: &str) {
+    let log_path = {
+        let Ok(config) = TOKEN_LOG_CONFIG.lock() else {
+            return;
+        };
+        if !config.enabled {
+            return;
+        }
+        config.log_path.clone()
+    };
+
+    let Ok(mut file) = OpenOptions::new().append(true).open(&log_path) else {
+        return;
+    };
+
+    let _ = writeln!(file, "Batch: {input}");
+}
