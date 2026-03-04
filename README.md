@@ -2,9 +2,7 @@
 
 Neovim plugin to gamify development in the spirit of old school RuneScape.
 
-## Description
-
-Vimscape2007 transforms your Vim experience into an RPG-style progression system. As you use Vim commands, you earn experience points across 11 distinct skills, leveling from 1-99 using a RuneScape-inspired XP curve.
+Track your Vim usage and earn XP across 11 skills, leveling from 1-99 on a RuneScape-inspired XP curve.
 
 ### Skills
 
@@ -22,72 +20,49 @@ Vimscape2007 transforms your Vim experience into an RPG-style progression system
 | **Knowledge** | Help system usage | `:help`, `:h` |
 | **Saving** | File saving | `:w` |
 
-## Screenshots / Demo
-
 <!-- TODO: Add screenshots and/or GIF demo of the plugin in action -->
 
 ## Requirements
 
 - Neovim 0.11+
-- Rust toolchain (for building the backend)
+- Rust toolchain (only if building from source)
 
 ## Installation
 
-### Using lazy.nvim
+### lazy.nvim
 
 ```lua
+-- Pre-built binaries (recommended)
 {
     "jakewaldrip/vimscape2007.nvim",
-    build = "cd vimscape_backend && ./build-dev.sh",
-    config = function()
-        require("vimscape2007").setup()
-    end,
+    version = "*",
+    opts = {},
 }
-```
 
-### Using packer.nvim
-
-```lua
-use {
+-- Build from source
+{
     "jakewaldrip/vimscape2007.nvim",
-    run = "cd vimscape_backend && ./build-dev.sh",
-    config = function()
-        require("vimscape2007").setup()
-    end,
+    opts = {},
 }
 ```
 
-### Manual Installation
+### Manual
 
 1. Clone the repository
 2. Build the Rust backend:
    ```bash
-   cd vimscape_backend && ./build-dev.sh
+   cd vimscape_backend && cargo build --release
    ```
-3. Add the plugin to your Neovim configuration
+3. Copy the compiled library to `lua/`:
+   ```bash
+   # macOS
+   cp vimscape_backend/target/release/libvimscape_backend.dylib lua/vimscape_backend.so
+   # Linux
+   cp vimscape_backend/target/release/libvimscape_backend.so lua/vimscape_backend.so
+   ```
+4. Add the plugin to your Neovim configuration
 
 ## Configuration
-
-```lua
-require("vimscape2007").setup({
-    -- Directory for the database file (default: plugin directory)
-    db_path = vim.fn.stdpath("data") .. "/vimscape/",
-
-    -- Database filename (default: "vimscape.db")
-    db_name = "vimscape.db",
-
-    -- Number of keystrokes before processing (default: 1000)
-    batch_size = 1000,
-
-    -- Minimum log level for notifications (default: vim.log.levels.INFO)
-    log_level = vim.log.levels.INFO,
-
-    -- Show notification after each batch processing (default: false)
-    batch_notify = false,
-})
-```
-
-### Configuration Options
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
@@ -105,12 +80,7 @@ require("vimscape2007").setup({
 | `:Vimscape details` | Show details for skill under cursor |
 | `:Vimscape toggle` | Toggle keystroke recording on/off |
 
-### Stats Window Keymaps
-
-| Key | Action |
-|-----|--------|
-| `q` | Close window |
-| `d` | Show details for skill under cursor |
+In the stats window, press `q` to close or `d` to show details for the skill under cursor.
 
 ## License
 

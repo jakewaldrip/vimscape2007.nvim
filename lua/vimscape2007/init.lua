@@ -34,6 +34,11 @@ M.setup = function(opts)
 	config = vim.tbl_deep_extend("force", config, opts or {})
 	vimscape.setup_tables(get_db_full_path())
 
+	if config.token_log then
+		vimscape.enable_token_log(get_db_full_path())
+		vim.notify("Vimscape token logging enabled", vim.log.levels.INFO)
+	end
+
 	M.create_user_commands()
 end
 
@@ -99,12 +104,25 @@ M.show_details = function(word)
 	vim.bo[window_config.vimscape_details_bufnr].modifiable = false
 end
 
+M.flush = function()
+	local typed_letters = globals.get_typed_letters()
+	if #typed_letters == 0 then
+		vim.notify("Vimscape: no keystrokes to flush", vim.log.levels.INFO)
+		return
+	end
+
+	local string_value = table.concat(typed_letters)
+	vimscape.process_batch(string_value, get_db_full_path())
+	globals.clear_typed_letters()
+	vim.notify("Vimscape: flushed " .. #typed_letters .. " keystrokes", vim.log.levels.INFO)
+end
+
 M.create_user_commands = function()
 	vim.api.nvim_create_user_command("Vimscape", function(cmd_opts)
 		local command = cmd_opts.args
 
 		if command == "" then
-			vim.notify("Vimscape commands: stats, details, toggle", vim.log.levels.INFO)
+			vim.notify("Vimscape commands: stats, details, toggle, flush", vim.log.levels.INFO)
 			return
 		end
 
@@ -116,13 +134,15 @@ M.create_user_commands = function()
 			M.show_data()
 		elseif command == "toggle" then
 			M.toggle()
+		elseif command == "flush" then
+			M.flush()
 		else
-			vim.notify("Invalid Vimscape command. Use: stats, details, toggle", vim.log.levels.WARN)
+			vim.notify("Invalid Vimscape command. Use: stats, details, toggle, flush", vim.log.levels.WARN)
 		end
 	end, {
 		nargs = "?",
 		complete = function(arg_lead, cmd_line, cursor_pos)
-			local commands = { "stats", "details", "toggle" }
+			local commands = { "stats", "details", "toggle", "flush" }
 			local matches = {}
 			for _, cmd in ipairs(commands) do
 				if cmd:find(arg_lead, 1, true) == 1 then
@@ -131,7 +151,7 @@ M.create_user_commands = function()
 			end
 			return matches
 		end,
-		desc = "Vimscape plugin commands: stats, details, toggle"
+		desc = "Vimscape plugin commands: stats, details, toggle, flush"
 	})
 end
 

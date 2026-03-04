@@ -11,13 +11,23 @@ use crate::{
     lexer::Lexer,
     parse_utils::parse_action_into_skill,
     skill_data::{format_skill_data, format_skill_details},
+    token_log,
 };
+
+#[allow(clippy::needless_pass_by_value)]
+pub fn enable_token_log(db_path: String) {
+    token_log::enable(&db_path);
+}
 
 pub fn process_batch((input, db_path): (String, String)) -> bool {
     let mut lexer = Lexer::new(&input);
     let mut skills: HashMap<String, i32> = HashMap::new();
+    let logging = token_log::is_enabled();
 
     while let Some(token) = lexer.next_token() {
+        if logging {
+            token_log::log_token(&token);
+        }
         if let Some(result) = parse_action_into_skill(&token) {
             let skill_str = result.to_str();
             let new_exp = result.get_exp_from_skill();

@@ -17,5 +17,13 @@ Cargo.lock
 
 # Pre-built binary from Rust side of the plugin
 *.so
-
 lua/*.so
+
+# Build script version tracking file
+lua/.vimscape_backend_version
+
+# Temporary download files
+*.so.tmp
+
+# Testing helper file
+integration_test_commands.txt

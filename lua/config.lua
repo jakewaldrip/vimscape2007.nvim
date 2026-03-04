@@ -9,12 +9,14 @@ end
 ---@field batch_size integer The number of keys typed before processing the batch
 ---@field log_level integer Minimum log level for notifications (vim.log.levels)
 ---@field batch_notify boolean Whether to notify on batch processing
+---@field token_log boolean Whether to enable token logging to file for integration testing
 local M = {
 	db_path = get_plugin_dir() .. "/",
 	db_name = "vimscape.db",
 	batch_size = 1000,
 	log_level = vim.log.levels.INFO,
 	batch_notify = false,
+	token_log = false,
 }
 
 return M
