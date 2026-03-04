@@ -25,5 +25,6 @@ lua/.vimscape_backend_version
 # Temporary download files
 *.so.tmp
 
-# Testing helper file
+# Testing helper files
 integration_test_commands.txt
+vimscape_token_log.txt

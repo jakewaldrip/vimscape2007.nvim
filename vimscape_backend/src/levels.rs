@@ -32,7 +32,7 @@ pub fn get_updated_levels(
 
     for data in skill_data {
         if let Some(exp) = batch_xp.get(&data.skill_name) {
-            let new_level = get_level_for_exp(*exp);
+            let new_level = get_level_for_exp(data.total_exp + *exp);
             updated_levels.insert(data.skill_name.clone(), new_level);
         }
     }
@@ -188,5 +188,46 @@ mod tests {
         let exp = 14_000_000;
         let result = get_level_for_exp(exp);
         assert_eq!(result, 99);
+    }
+
+    #[test]
+    fn test_get_updated_levels_uses_cumulative_xp() {
+        // Player has 75 existing XP (level 1) and gains 10 more in this batch.
+        // 85 total XP should be level 2 (level 2 threshold is ~83 XP).
+        // Without the fix, only batch XP (10) would be used → level 1 (wrong).
+        let skill_data = vec![SkillData {
+            skill_name: "VerticalNavigation".to_string(),
+            total_exp: 75,
+            level: 1,
+        }];
+        let mut batch_xp = HashMap::new();
+        batch_xp.insert("VerticalNavigation".to_string(), 10);
+
+        let result = get_updated_levels(&skill_data, &batch_xp);
+        assert_eq!(
+            result.get("VerticalNavigation"),
+            Some(&2),
+            "Level should be computed from cumulative XP (75 + 10 = 85), not batch XP alone (10)"
+        );
+    }
+
+    #[test]
+    fn test_get_updated_levels_no_existing_xp() {
+        // New player with 0 existing XP gains 10 XP in this batch.
+        // 10 total XP should still be level 1.
+        let skill_data = vec![SkillData {
+            skill_name: "VerticalNavigation".to_string(),
+            total_exp: 0,
+            level: 1,
+        }];
+        let mut batch_xp = HashMap::new();
+        batch_xp.insert("VerticalNavigation".to_string(), 10);
+
+        let result = get_updated_levels(&skill_data, &batch_xp);
+        assert_eq!(
+            result.get("VerticalNavigation"),
+            Some(&1),
+            "Level should be 1 when total XP (0 + 10 = 10) is below level 2 threshold"
+        );
     }
 }
