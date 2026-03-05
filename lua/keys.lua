@@ -80,6 +80,11 @@ M.record_keys = function(typed, db_path, batch_size, config)
 		return
 	end
 
+	-- Apply user-configured key overrides (e.g. remap ";" -> ":" for the lexer)
+	if config and config.key_overrides and config.key_overrides[new_key] then
+		new_key = config.key_overrides[new_key]
+	end
+
 	local typed_letters = globals.get_typed_letters()
 	if #typed_letters >= batch_size then
 		local string_value = table.concat(typed_letters)
