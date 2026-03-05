@@ -1,4 +1,4 @@
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     // gj, gk, j, k, 10j,
     MoveVerticalBasic(i32),
