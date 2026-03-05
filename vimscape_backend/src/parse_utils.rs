@@ -22,9 +22,6 @@ pub fn parse_action_into_skill(token: &Token) -> Option<Skills> {
         Token::HelpPage(completed) => Some(Skills::Knowledge(if *completed { 1 } else { 10 })),
         Token::SaveFile(completed) => Some(Skills::Saving(if *completed { 1 } else { 10 })),
         Token::SearchRepeat => Some(Skills::Search(5)),
-        Token::Unhandled(token) => {
-            println!("Unhandled token: {token}");
-            None
-        }
+        Token::Unhandled(_) => None,
     }
 }

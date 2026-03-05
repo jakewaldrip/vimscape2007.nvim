@@ -20,6 +20,60 @@ pub fn enable_token_log(db_path: String) {
     token_log::enable(&db_path);
 }
 
+/// Strip echoed leader-key sequences from the raw input.
+///
+/// Neovim's `vim.on_key` replays the expansion of custom `<Space>`-leader
+/// mappings, producing a duplicated suffix in the batch string. For example,
+/// pressing `<Space>sf` yields `|space|sf<Space>sf` — the real keystrokes
+/// followed by a literal `<Space>` echo of the same characters.
+///
+/// This function finds every occurrence of `|space|{chars}<Space>{same chars}`
+/// and removes the entire sequence. The binding suffix (`{chars}`) must be
+/// short alphanumeric characters — this prevents false matches against
+/// unrelated `|space|` / `<Space>` pairs separated by other commands.
+fn strip_leader_echoes(input: &str) -> String {
+    const PIPE_SPACE: &str = "|space|";
+    const ANGLE_SPACE: &str = "<Space>";
+    const MAX_BINDING_LEN: usize = 10;
+
+    let mut result = String::with_capacity(input.len());
+    let mut remaining = input;
+
+    while let Some(pipe_pos) = remaining.find(PIPE_SPACE) {
+        // Copy everything before this |space| verbatim (but don't copy |space| yet)
+        result.push_str(&remaining[..pipe_pos]);
+        remaining = &remaining[pipe_pos + PIPE_SPACE.len()..];
+
+        // Extract the binding suffix: the short alphanumeric chars immediately
+        // after |space| that form the leader keybinding (e.g., "sf" in |space|sf)
+        let binding_len = remaining
+            .chars()
+            .take(MAX_BINDING_LEN)
+            .take_while(char::is_ascii_alphanumeric)
+            .count();
+
+        if binding_len > 0 {
+            let binding = &remaining[..binding_len];
+            let after_binding = &remaining[binding_len..];
+
+            // Check if <Space>{binding} immediately follows the binding chars
+            let echo = format!("{ANGLE_SPACE}{binding}");
+            if let Some(after_echo) = after_binding.strip_prefix(echo.as_str()) {
+                // Leader echo confirmed — drop the entire |space|{chars}<Space>{chars}
+                remaining = after_echo;
+                continue;
+            }
+        }
+
+        // Not a leader echo — put |space| back and continue
+        result.push_str(PIPE_SPACE);
+    }
+
+    // Append any remaining input after the last match (or all of it if no match)
+    result.push_str(remaining);
+    result
+}
+
 /// Remove consecutive duplicate `CameraMovement` tokens.
 ///
 /// `vim.on_key` can fire twice for multi-character commands like `zz`/`zt`/`zb`,
@@ -38,6 +92,7 @@ fn dedup_tokens(tokens: &mut Vec<Token>) {
 }
 
 pub fn process_batch((input, db_path): (String, String)) -> bool {
+    let input = strip_leader_echoes(&input);
     let mut lexer = Lexer::new(&input);
     let mut skills: HashMap<String, i32> = HashMap::new();
     let logging = token_log::is_enabled();
@@ -237,5 +292,86 @@ mod tests {
         // Input "zzzzzt" → lexer produces CM, CM, CM → dedup removes second → CM, CM
         let tokens = lex_and_dedup("zzzzzt");
         assert_eq!(count_camera(&tokens), 2);
+    }
+
+    // --- strip_leader_echoes tests ---
+
+    #[test]
+    fn test_strip_leader_basic() {
+        // <Space>sf echoed as |space|sf<Space>sf → entire sequence removed
+        let input = "|space|sf<Space>sf";
+        assert_eq!(strip_leader_echoes(input), "");
+    }
+
+    #[test]
+    fn test_strip_leader_single_char() {
+        // Single-char leader binding: <Space>e → |space|e<Space>e
+        let input = "|space|e<Space>e";
+        assert_eq!(strip_leader_echoes(input), "");
+    }
+
+    #[test]
+    fn test_strip_leader_longer_binding() {
+        // Longer binding: <Space>abc → |space|abc<Space>abc
+        let input = "|space|abc<Space>abc";
+        assert_eq!(strip_leader_echoes(input), "");
+    }
+
+    #[test]
+    fn test_strip_leader_with_surrounding_keys() {
+        // Leader echo embedded within other keystrokes
+        let input = "jjk|space|sf<Space>sfhhl";
+        assert_eq!(strip_leader_echoes(input), "jjkhhl");
+    }
+
+    #[test]
+    fn test_strip_leader_multiple_echoes() {
+        // Two separate leader echoes in one batch
+        let input = "|space|sf<Space>sfjj|space|ab<Space>ab";
+        assert_eq!(strip_leader_echoes(input), "jj");
+    }
+
+    #[test]
+    fn test_strip_leader_no_echo() {
+        // |space| without a matching <Space> echo — left untouched
+        let input = "|space|sfjjkk";
+        assert_eq!(strip_leader_echoes(input), "|space|sfjjkk");
+    }
+
+    #[test]
+    fn test_strip_leader_no_space_at_all() {
+        // No |space| in input — returned unchanged
+        let input = "jjkkhh";
+        assert_eq!(strip_leader_echoes(input), "jjkkhh");
+    }
+
+    #[test]
+    fn test_strip_leader_empty_input() {
+        assert_eq!(strip_leader_echoes(""), "");
+    }
+
+    #[test]
+    fn test_strip_leader_mismatch_not_stripped() {
+        // <Space> is present but the chars after it don't match — no stripping
+        let input = "|space|sf<Space>xy";
+        assert_eq!(strip_leader_echoes(input), "|space|sf<Space>xy");
+    }
+
+    #[test]
+    fn test_strip_leader_later_space_not_consumed_by_earlier_mismatch() {
+        // Regression: multiple |space| where the first has no <Space> echo but
+        // a later one does. The mismatch branch must not consume the <Space>
+        // so the correct |space| can still match against it.
+        let input = ":w|enter|<C-D><C-D><C-U><C-U>yyyy110yyGG|space|ss|space|s|escape|x|space|sw<Space>sw|escape|:q|escape|:Vimsacpe|backspace||backspace||backspace||backspace|cape|space|flush|enter|";
+        let expected = ":w|enter|<C-D><C-D><C-U><C-U>yyyy110yyGG|space|ss|space|s|escape|x|escape|:q|escape|:Vimsacpe|backspace||backspace||backspace||backspace|cape|space|flush|enter|";
+        assert_eq!(strip_leader_echoes(input), expected);
+    }
+
+    #[test]
+    fn test_strip_leader_preserves_pipe_space_in_commands() {
+        // |space| inside a command (e.g., :Vimscape|space|toggle) — no <Space> echo,
+        // so it passes through untouched
+        let input = ":Vimscape|space|toggle|enter|";
+        assert_eq!(strip_leader_echoes(input), ":Vimscape|space|toggle|enter|");
     }
 }
