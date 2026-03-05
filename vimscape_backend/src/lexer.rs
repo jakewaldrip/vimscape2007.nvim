@@ -299,6 +299,33 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    /// Skip a duplicate character if it matches the expected char.
+    /// This handles Neovim's `vim.on_key` replay behavior where motion
+    /// keys typed during operator-pending mode are echoed a second time
+    /// in the keystroke stream.
+    fn skip_if_duplicate(&mut self, ch: char) {
+        if self.input.peek() == Some(&ch) {
+            self.input.next();
+        }
+    }
+
+    /// Deduplicate a motion count digit string that may have been doubled
+    /// by Neovim's `vim.on_key` replay. If the digit string has even length
+    /// and the first half equals the second half, returns the count from the
+    /// first half only. Otherwise returns the full accumulated count.
+    ///
+    /// Examples: "33" → 3, "1212" → 12, "3" → 3, "123" → 123
+    fn dedup_motion_count(digit_str: &str) -> u32 {
+        let len = digit_str.len();
+        if len.is_multiple_of(2) && len >= 2 {
+            let (first_half, second_half) = digit_str.split_at(len / 2);
+            if first_half == second_half {
+                return first_half.parse::<u32>().unwrap_or(999).min(999);
+            }
+        }
+        digit_str.parse::<u32>().unwrap_or(999).min(999)
+    }
+
     /// Check if a character is a valid text object specifier
     fn is_text_object_char(ch: char) -> bool {
         matches!(
@@ -325,15 +352,18 @@ impl<'a> Lexer<'a> {
         let is_doubled = ch == Self::operator_to_char(operator);
 
         if is_doubled {
+            self.skip_if_duplicate(ch);
             return Self::operator_to_token(operator, count);
         }
 
         // Handle motion count (e.g., d3w)
         if ch.is_ascii_digit() && ch != '0' {
+            let mut motion_count_str = String::from(ch);
             let mut motion_count = ch.to_digit(10).unwrap();
             while let Some(&next_ch) = self.input.peek() {
                 if next_ch.is_ascii_digit() {
                     self.input.next();
+                    motion_count_str.push(next_ch);
                     motion_count = motion_count
                         .saturating_mul(10)
                         .saturating_add(next_ch.to_digit(10).unwrap());
@@ -344,6 +374,11 @@ impl<'a> Lexer<'a> {
                     break;
                 }
             }
+            // Deduplicate replayed count digits (e.g., d3w → d33w).
+            // Neovim replays the count digits, so "33" is really "3" doubled.
+            // If the digit string has even length and the first half equals the
+            // second half, use only the first half as the real count.
+            let motion_count = Self::dedup_motion_count(&motion_count_str);
             let total_count = count.saturating_mul(motion_count);
             return self.handle_operator_with_motion(operator, total_count);
         }
@@ -353,22 +388,47 @@ impl<'a> Lexer<'a> {
             if let Some(&obj_ch) = self.input.peek() {
                 if Self::is_text_object_char(obj_ch) {
                     self.input.next(); // consume the object char
+                                       // Skip replayed text object chars (e.g., ciw → ciwiw)
+                    self.skip_if_duplicate(ch);
+                    self.skip_if_duplicate(obj_ch);
                     return Self::operator_to_token(operator, count);
                 }
             }
         }
 
         // Handle regular motions
-        self.handle_operator_char_motion(operator, count, ch)
+        self.handle_operator_char_motion(operator, count, ch, true)
     }
 
-    /// Handle operator with a motion character
-    fn handle_operator_char_motion(&mut self, operator: Operator, count: u32, ch: char) -> Token {
+    /// Handle operator with a motion character.
+    /// `skip_dupes` controls whether to consume replayed motion chars from
+    /// Neovim's `vim.on_key` echo. When a motion count was already parsed
+    /// (e.g., `d3w`), the motion char is not replayed, so `skip_dupes` is false.
+    fn handle_operator_char_motion(
+        &mut self,
+        operator: Operator,
+        count: u32,
+        ch: char,
+        skip_dupes: bool,
+    ) -> Token {
+        // Handle line operation: motion char matches operator (e.g., d3d = delete 3 lines)
+        if ch == Self::operator_to_char(operator) {
+            return Self::operator_to_token(operator, count);
+        }
+
         match ch {
             'w' | 'W' | 'e' | 'E' | 'b' | 'B' | '$' | '^' | '0' | 'j' | 'k' | 'h' | 'l' => {
+                if skip_dupes {
+                    self.skip_if_duplicate(ch);
+                }
                 Self::operator_to_token(operator, count)
             }
             'f' | 'F' | 't' | 'T' => {
+                if skip_dupes {
+                    // Skip replayed f/F/t/T command char before consuming the target
+                    // e.g., dfa → dffa: skip the replayed f, then consume target a
+                    self.skip_if_duplicate(ch);
+                }
                 if self.input.next().is_some() {
                     Self::operator_to_token(operator, count)
                 } else {
@@ -380,6 +440,11 @@ impl<'a> Lexer<'a> {
                     self.input.next();
                     match next_ch {
                         'g' | 'j' | 'k' | '$' | '^' | '0' | 'e' | 'E' => {
+                            if skip_dupes {
+                                // Skip replayed g-motion (g + next_ch)
+                                self.skip_if_duplicate('g');
+                                self.skip_if_duplicate(next_ch);
+                            }
                             Self::operator_to_token(operator, count)
                         }
                         _ => Token::Unhandled(format!(
@@ -395,10 +460,12 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    /// Handle operator with accumulated motion count
+    /// Handle operator with accumulated motion count.
+    /// When a motion count was present (e.g., `d3w`), the motion char itself
+    /// is not replayed by Neovim, so we pass `skip_dupes = false`.
     fn handle_operator_with_motion(&mut self, operator: Operator, count: u32) -> Token {
         if let Some(ch) = self.input.next() {
-            self.handle_operator_char_motion(operator, count, ch)
+            self.handle_operator_char_motion(operator, count, ch, false)
         } else {
             Token::Unhandled(Self::operator_to_char(operator).to_string())
         }
@@ -413,10 +480,12 @@ impl<'a> Lexer<'a> {
 
         // Handle motion count (e.g., gu3w)
         if ch.is_ascii_digit() && ch != '0' {
+            let mut motion_count_str = String::from(ch);
             let mut motion_count = ch.to_digit(10).unwrap();
             while let Some(&next_ch) = self.input.peek() {
                 if next_ch.is_ascii_digit() {
                     self.input.next();
+                    motion_count_str.push(next_ch);
                     motion_count = motion_count
                         .saturating_mul(10)
                         .saturating_add(next_ch.to_digit(10).unwrap());
@@ -427,23 +496,38 @@ impl<'a> Lexer<'a> {
                     break;
                 }
             }
+            // Deduplicate replayed count digits
+            let motion_count = Self::dedup_motion_count(&motion_count_str);
             return self
                 .handle_case_operator_with_motion(operator, count.saturating_mul(motion_count));
         }
 
         // Handle regular motions
-        self.handle_case_operator_char_motion(operator, ch)
+        self.handle_case_operator_char_motion(operator, ch, true)
     }
 
     /// Handle case operator with a motion character.
     /// Note: count is not used here because `TextManipulationAdvanced` doesn't carry count info.
     /// The motion itself (not the case operator) determines the range.
-    fn handle_case_operator_char_motion(&mut self, operator: &str, ch: char) -> Token {
+    /// `skip_dupes` controls whether to consume replayed motion chars.
+    fn handle_case_operator_char_motion(
+        &mut self,
+        operator: &str,
+        ch: char,
+        skip_dupes: bool,
+    ) -> Token {
         match ch {
             'w' | 'W' | 'e' | 'E' | 'b' | 'B' | '$' | '^' | '0' | 'j' | 'k' | 'h' | 'l' => {
+                if skip_dupes {
+                    self.skip_if_duplicate(ch);
+                }
                 Token::TextManipulationAdvanced
             }
             'f' | 'F' | 't' | 'T' => {
+                if skip_dupes {
+                    // Skip replayed f/F/t/T before consuming target
+                    self.skip_if_duplicate(ch);
+                }
                 if self.input.next().is_some() {
                     Token::TextManipulationAdvanced
                 } else {
@@ -455,6 +539,10 @@ impl<'a> Lexer<'a> {
                     self.input.next();
                     match next_ch {
                         'g' | 'j' | 'k' | '$' | '^' | '0' | 'e' | 'E' => {
+                            if skip_dupes {
+                                self.skip_if_duplicate('g');
+                                self.skip_if_duplicate(next_ch);
+                            }
                             Token::TextManipulationAdvanced
                         }
                         _ => Token::Unhandled(format!("{operator}g{next_ch}")),
@@ -467,6 +555,10 @@ impl<'a> Lexer<'a> {
                 if let Some(&obj_ch) = self.input.peek() {
                     if Self::is_text_object_char(obj_ch) {
                         self.input.next(); // consume the object char
+                        if skip_dupes {
+                            self.skip_if_duplicate(ch);
+                            self.skip_if_duplicate(obj_ch);
+                        }
                         return Token::TextManipulationAdvanced;
                     }
                 }
@@ -476,10 +568,12 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    /// Handle case operator with accumulated motion count
+    /// Handle case operator with accumulated motion count.
+    /// When a motion count was present, the motion char itself is not
+    /// replayed by Neovim, so we pass `skip_dupes = false`.
     fn handle_case_operator_with_motion(&mut self, operator: &str, _count: u32) -> Token {
         if let Some(ch) = self.input.next() {
-            self.handle_case_operator_char_motion(operator, ch)
+            self.handle_case_operator_char_motion(operator, ch, false)
         } else {
             Token::Unhandled(operator.to_string())
         }
@@ -1271,14 +1365,16 @@ mod tests {
 
     #[test]
     fn test_delete_line() {
-        let mut lexer = Lexer::new("dd3dd");
+        // dd + 3dd — with Neovim replay: ddd + 3ddd
+        let mut lexer = Lexer::new("ddd3ddd");
         assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
         assert!(matches!(lexer.next_token(), Some(Token::DeleteText(3))));
     }
 
     #[test]
     fn test_delete_motion() {
-        let mut lexer = Lexer::new("dwdWd$d3w");
+        // dw, dW, d$, d3w — with Neovim replay
+        let mut lexer = Lexer::new("dwwdWWd$$d33w");
         assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
         assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
         assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
@@ -1287,7 +1383,8 @@ mod tests {
 
     #[test]
     fn test_yank() {
-        let mut lexer = Lexer::new("ywy$");
+        // yw, y$ — with Neovim replay
+        let mut lexer = Lexer::new("ywwy$$");
         assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
         assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
         assert!(lexer.next_token().is_none());
@@ -1295,7 +1392,8 @@ mod tests {
 
     #[test]
     fn test_change() {
-        let mut lexer = Lexer::new("cccwc$");
+        // cc, cw, c$ — with Neovim replay: ccc + cww + c$$
+        let mut lexer = Lexer::new("ccccwwc$$");
         assert!(matches!(
             lexer.next_token(),
             Some(Token::TextManipulationAdvanced)
@@ -1329,7 +1427,8 @@ mod tests {
 
     #[test]
     fn test_text_objects() {
-        let mut lexer = Lexer::new("ciwcawci)ca}");
+        // ciw, caw, ci), ca} — with Neovim replay
+        let mut lexer = Lexer::new("ciwiwcawawci)i)ca}a}");
         for _ in 0..4 {
             assert!(matches!(
                 lexer.next_token(),
@@ -1340,7 +1439,8 @@ mod tests {
 
     #[test]
     fn test_delete_text_objects() {
-        let mut lexer = Lexer::new("diwdawdi)da}");
+        // diw, daw, di), da} — with Neovim replay
+        let mut lexer = Lexer::new("diwiwdawawdi)i)da}a}");
         for _ in 0..4 {
             assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
         }
@@ -1348,7 +1448,8 @@ mod tests {
 
     #[test]
     fn test_yank_text_objects() {
-        let mut lexer = Lexer::new("yiwyawyi)ya}");
+        // yiw, yaw, yi), ya} — with Neovim replay
+        let mut lexer = Lexer::new("yiwiwyawawyi)i)ya}a}");
         for _ in 0..4 {
             assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
         }
@@ -1380,14 +1481,16 @@ mod tests {
 
     #[test]
     fn test_delete_with_find_motion() {
-        let mut lexer = Lexer::new("dfxdta");
+        // dfx, dta — with Neovim replay (f/t replayed, target not)
+        let mut lexer = Lexer::new("dffxdtta");
         assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
         assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
     }
 
     #[test]
     fn test_operator_with_g_motion() {
-        let mut lexer = Lexer::new("dggyggygg");
+        // dgg, ygg, ygg — with Neovim replay
+        let mut lexer = Lexer::new("dggggyggggygggg");
         assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
         assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
         assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
@@ -1553,7 +1656,8 @@ mod tests {
 
     #[test]
     fn test_mixed_complex_sequence() {
-        let mut lexer = Lexer::new("5j/test|enter|dd3gkzz:w|enter|");
+        // 5j, /test<enter>, dd, 3gk, zz, :w<enter> — dd with replay → ddd
+        let mut lexer = Lexer::new("5j/test|enter|ddd3gkzz:w|enter|");
         assert!(matches!(
             lexer.next_token(),
             Some(Token::MoveVerticalBasic(5))
@@ -1790,8 +1894,8 @@ mod tests {
 
     #[test]
     fn test_yy_multiple_raw() {
-        // Two yy commands
-        let mut lexer = Lexer::new("yyyy");
+        // Two yy commands — with Neovim replay: yyy + yyy
+        let mut lexer = Lexer::new("yyyyyy");
         assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
         assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
         assert!(lexer.next_token().is_none());
@@ -1950,6 +2054,393 @@ mod tests {
             lexer.next_token(),
             Some(Token::MoveVerticalBasic(1))
         ));
+        assert!(lexer.next_token().is_none());
+    }
+
+    // =========================================================================
+    // Operator-Pending Motion Replay Tests
+    // =========================================================================
+    // Neovim's vim.on_key replays motion keys typed during operator-pending
+    // mode. These tests verify the lexer correctly skips the duplicated chars.
+
+    // --- Doubled operator replay ---
+
+    #[test]
+    fn test_dd_replay() {
+        // dd arrives as ddd from vim.on_key replay
+        let mut lexer = Lexer::new("ddd");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_yy_replay() {
+        let mut lexer = Lexer::new("yyy");
+        assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_cc_replay() {
+        let mut lexer = Lexer::new("ccc");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(lexer.next_token().is_none());
+    }
+
+    // --- Single-char motion replay ---
+
+    #[test]
+    fn test_d_dollar_replay() {
+        // d$ arrives as d$$
+        let mut lexer = Lexer::new("d$$");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_y_dollar_replay() {
+        let mut lexer = Lexer::new("y$$");
+        assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_dw_replay() {
+        let mut lexer = Lexer::new("dww");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_cw_replay() {
+        let mut lexer = Lexer::new("cww");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_de_replay() {
+        let mut lexer = Lexer::new("dee");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_dj_replay() {
+        // dj arrives as djj
+        let mut lexer = Lexer::new("djj");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(lexer.next_token().is_none());
+    }
+
+    // --- Text object replay ---
+
+    #[test]
+    fn test_ciw_replay() {
+        // ciw arrives as ciwiw
+        let mut lexer = Lexer::new("ciwiw");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_diw_replay() {
+        let mut lexer = Lexer::new("diwiw");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_yiw_replay() {
+        let mut lexer = Lexer::new("yiwiw");
+        assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_caw_replay() {
+        let mut lexer = Lexer::new("cawaw");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_ci_paren_replay() {
+        // ci) arrives as ci)i)
+        let mut lexer = Lexer::new("ci)i)");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(lexer.next_token().is_none());
+    }
+
+    // --- Find motion replay ---
+
+    #[test]
+    fn test_dfa_replay() {
+        // dfa arrives as dffa (f is replayed, target a is not)
+        let mut lexer = Lexer::new("dffa");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_dta_replay() {
+        let mut lexer = Lexer::new("dtta");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_cfa_replay() {
+        let mut lexer = Lexer::new("cffa");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(lexer.next_token().is_none());
+    }
+
+    // --- g-motion replay ---
+
+    #[test]
+    fn test_dgg_replay() {
+        // dgg arrives as dgggg (full gg motion replayed)
+        let mut lexer = Lexer::new("dgggg");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_ygg_replay() {
+        let mut lexer = Lexer::new("ygggg");
+        assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_dgj_replay() {
+        // dgj arrives as dgjgj
+        let mut lexer = Lexer::new("dgjgj");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(lexer.next_token().is_none());
+    }
+
+    // --- Motion count replay ---
+
+    #[test]
+    fn test_d3w_replay() {
+        // d3w arrives as d33w (count digit replayed, motion char not)
+        let mut lexer = Lexer::new("d33w");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(3))));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_d3d_replay() {
+        // d3d arrives as d33d (count replayed, doubled-op d skipped)
+        let mut lexer = Lexer::new("d33d");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(3))));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_prefix_count_dw_replay() {
+        // 3dw arrives as 3dww (prefix count outside operator-pending, motion replayed)
+        let mut lexer = Lexer::new("3dww");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(3))));
+        assert!(lexer.next_token().is_none());
+    }
+
+    // --- Case operator replay ---
+
+    #[test]
+    fn test_case_toggle_w_replay() {
+        // g~w arrives as g~ww
+        let mut lexer = Lexer::new("g~ww");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_case_lower_e_replay() {
+        // gue arrives as guee
+        let mut lexer = Lexer::new("guee");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_case_upper_dollar_replay() {
+        // gU$ arrives as gU$$
+        let mut lexer = Lexer::new("gU$$");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_case_operator_text_object_replay() {
+        // guiw arrives as guiwiw
+        let mut lexer = Lexer::new("guiwiw");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(lexer.next_token().is_none());
+    }
+
+    // --- Backward compatibility (no replay) ---
+    // These ensure the lexer still works with non-duplicated input
+
+    #[test]
+    fn test_no_replay_dd() {
+        let mut lexer = Lexer::new("dd");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_no_replay_dw() {
+        let mut lexer = Lexer::new("dw");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_no_replay_ciw() {
+        let mut lexer = Lexer::new("ciw");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_no_replay_dfa() {
+        let mut lexer = Lexer::new("dfa");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_no_replay_dgg() {
+        let mut lexer = Lexer::new("dgg");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(lexer.next_token().is_none());
+    }
+
+    // --- Real-world batch replay tests ---
+
+    #[test]
+    fn test_real_batch_replay_1() {
+        // From actual Neovim session: $, 0, d$, u, j, y$, :Vimscape flush<enter>
+        let mut lexer = Lexer::new("$0d$$ujy$$:Vimscape|space|flush|enter|");
+        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "$"));
+        assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "0"));
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(matches!(lexer.next_token(), Some(Token::UndoRedo)));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::MoveVerticalBasic(1))
+        ));
+        assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
+        assert!(matches!(lexer.next_token(), Some(Token::Command(true))));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_real_batch_replay_2() {
+        // From actual Neovim session: dd, u, ciw, u, :w<enter>
+        let mut lexer = Lexer::new("ddduciwiwu:w|enter|");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(matches!(lexer.next_token(), Some(Token::UndoRedo)));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::TextManipulationAdvanced)
+        ));
+        assert!(matches!(lexer.next_token(), Some(Token::UndoRedo)));
+        assert!(matches!(lexer.next_token(), Some(Token::SaveFile(true))));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_real_batch_replay_3() {
+        // From actual Neovim session: yiw, 3dw, d3w
+        // yiw→yiwiw, 3dw→3dww, d3w→d33w
+        let mut lexer = Lexer::new("yiwiw3dwwd33w");
+        assert!(matches!(lexer.next_token(), Some(Token::YankPaste)));
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(3))));
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(3))));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_real_batch_replay_4() {
+        // From actual Neovim session: jjj, dfa, dgg
+        // dfa→dffa, dgg→dgggg
+        let mut lexer = Lexer::new("jjjdffadgggg");
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::MoveVerticalBasic(1))
+        ));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::MoveVerticalBasic(1))
+        ));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::MoveVerticalBasic(1))
+        ));
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(lexer.next_token().is_none());
+    }
+
+    // --- Edge case: operator+motion followed by same motion key ---
+
+    #[test]
+    fn test_dw_then_w_replay() {
+        // User types dw then w. Arrives as dww + w = dwww
+        // Lexer: dw (consume, skip dup w) → DeleteText, then w → MoveHorizontalChunk
+        let mut lexer = Lexer::new("dwww");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(matches!(
+            lexer.next_token(),
+            Some(Token::MoveHorizontalChunk(1))
+        ));
+        assert!(lexer.next_token().is_none());
+    }
+
+    #[test]
+    fn test_dd_then_d_dollar_replay() {
+        // User types dd then d$. Arrives as ddd + d$$ = dddd$$
+        // Lexer: dd (skip dup d) → DeleteText, d$ (skip dup $) → DeleteText
+        let mut lexer = Lexer::new("dddd$$");
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
         assert!(lexer.next_token().is_none());
     }
 }
