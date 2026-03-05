@@ -15,7 +15,7 @@ pub enum Skills {
 
 impl Skills {
     pub fn to_str_vec() -> Vec<String> {
-        let skills_strs: Vec<String> = [
+        vec![
             Skills::to_str(&Skills::VerticalNavigation(0)),
             Skills::to_str(&Skills::HorizontalNavigation(0)),
             Skills::to_str(&Skills::CodeFlow(0)),
@@ -28,8 +28,6 @@ impl Skills {
             Skills::to_str(&Skills::Knowledge(0)),
             Skills::to_str(&Skills::Saving(0)),
         ]
-        .to_vec();
-        skills_strs
     }
 
     pub fn to_str(&self) -> String {

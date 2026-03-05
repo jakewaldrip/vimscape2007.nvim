@@ -4,8 +4,6 @@ use rusqlite::{params, Connection, Transaction};
 
 use crate::{skill_data::SkillData, skills::Skills};
 
-/// Retrieves all skill data from the database.
-/// Returns an empty vector on error.
 pub fn get_skill_data(conn: &Connection) -> Vec<SkillData> {
     let mut statement = match conn.prepare("SELECT name, exp, level FROM skills") {
         Ok(s) => s,
@@ -34,8 +32,6 @@ pub fn get_skill_data(conn: &Connection) -> Vec<SkillData> {
         .collect()
 }
 
-/// Creates the skills table and populates it with all skill types.
-/// Returns true on success, false on failure.
 pub fn create_tables(conn: &Connection) -> bool {
     if !create_skills_table(conn) {
         return false;
@@ -66,14 +62,11 @@ fn populate_skills_enum_table(conn: &Connection) -> bool {
             params![i, skill],
         ) {
             eprintln!("[vimscape] Insert skill {skill} failed: {e}");
-            // Continue with other skills
         }
     }
     true
 }
 
-/// Writes XP updates to the database.
-/// Returns true on success, false on failure.
 #[cfg(test)]
 pub fn write_exp_to_table(conn: &Connection, skills: HashMap<String, i32>) -> bool {
     for (key, exp) in skills {
@@ -82,14 +75,11 @@ pub fn write_exp_to_table(conn: &Connection, skills: HashMap<String, i32>) -> bo
             params![exp, key],
         ) {
             eprintln!("[vimscape] Update XP failed for {key}: {e}");
-            // Continue with other skills rather than aborting
         }
     }
     true
 }
 
-/// Writes level updates to the database.
-/// Returns true on success, false on failure.
 #[cfg(test)]
 pub fn write_levels_to_table(conn: &Connection, levels_diff: &HashMap<String, i32>) -> bool {
     for (key, level) in levels_diff {
@@ -98,14 +88,11 @@ pub fn write_levels_to_table(conn: &Connection, levels_diff: &HashMap<String, i3
             params![level, key],
         ) {
             eprintln!("[vimscape] Update level failed for {key}: {e}");
-            // Continue with other skills rather than aborting
         }
     }
     true
 }
 
-/// Retrieves skill data for a specific skill by name.
-/// Returns an empty vector on error.
 pub fn get_skill_details_from_db(conn: &Connection, skill_name: &str) -> Vec<SkillData> {
     let mut statement = match conn.prepare("SELECT name, exp, level FROM skills WHERE name = ?1") {
         Ok(s) => s,
@@ -134,9 +121,6 @@ pub fn get_skill_details_from_db(conn: &Connection, skill_name: &str) -> Vec<Ski
         .collect()
 }
 
-/// Writes XP updates within an existing transaction.
-/// Uses `prepare_cached` for efficiency in loops.
-/// Returns true on success, false on failure.
 pub fn write_exp_to_table_tx(tx: &Transaction, skills: HashMap<String, i32>) -> bool {
     let mut stmt = match tx.prepare_cached("UPDATE skills SET exp = exp + ?1 WHERE name = ?2") {
         Ok(s) => s,
@@ -149,16 +133,12 @@ pub fn write_exp_to_table_tx(tx: &Transaction, skills: HashMap<String, i32>) -> 
     for (key, exp) in skills {
         if let Err(e) = stmt.execute(params![exp, key]) {
             eprintln!("[vimscape] Update XP failed for {key}: {e}");
-            // Continue with other skills rather than aborting
         }
     }
 
     true
 }
 
-/// Writes level updates within an existing transaction.
-/// Uses `prepare_cached` for efficiency in loops.
-/// Returns true on success, false on failure.
 pub fn write_levels_to_table_tx(tx: &Transaction, levels_diff: &HashMap<String, i32>) -> bool {
     let mut stmt = match tx.prepare_cached("UPDATE skills SET level = ?1 WHERE name = ?2") {
         Ok(s) => s,
@@ -171,7 +151,6 @@ pub fn write_levels_to_table_tx(tx: &Transaction, levels_diff: &HashMap<String, 
     for (key, level) in levels_diff {
         if let Err(e) = stmt.execute(params![level, key]) {
             eprintln!("[vimscape] Update level failed for {key}: {e}");
-            // Continue with other skills rather than aborting
         }
     }
 

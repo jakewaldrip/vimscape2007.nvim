@@ -5,7 +5,6 @@ local utils = require("utils")
 ---@field stat_window_config function Returns config for the stats window
 ---@field vimscape_details_bufnr integer Buffer to show the details window inside
 ---@field details_window_config function Returns config for the details window
---
 local M = {}
 
 local function get_ui_size()
@@ -44,7 +43,7 @@ M.details_window_config = function()
 		style = "minimal",
 		focusable = false,
 		border = "rounded",
-		-- title = "Details",
+
 		zindex = 99,
 	}
 end

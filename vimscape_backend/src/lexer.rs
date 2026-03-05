@@ -70,9 +70,8 @@ pub struct Lexer<'a> {
 
 impl<'a> Lexer<'a> {
     pub fn new(input: &'a str) -> Self {
-        let chars = input.chars().peekable();
         Self {
-            input: chars,
+            input: input.chars().peekable(),
             state: State::None,
             accumulated_string: String::new(),
         }
@@ -83,29 +82,22 @@ impl<'a> Lexer<'a> {
     /// Returns None if not a valid control sequence.
     /// The caller has already consumed the initial '<'.
     fn try_parse_control_sequence(&mut self) -> Option<char> {
-        // We need to peek ahead to check for C-X> pattern
-        // Expected: C-X> where X is a single character
-
-        // Check for 'C'
         if self.input.peek() != Some(&'C') {
             return None;
         }
-        self.input.next(); // consume 'C'
+        self.input.next();
 
-        // Check for '-'
         if self.input.peek() != Some(&'-') {
             return None;
         }
-        self.input.next(); // consume '-'
+        self.input.next();
 
-        // Get the control character
         let ctrl_char = self.input.next()?;
 
-        // Check for closing '>'
         if self.input.peek() != Some(&'>') {
             return None;
         }
-        self.input.next(); // consume '>'
+        self.input.next();
 
         Some(ctrl_char)
     }
@@ -114,30 +106,15 @@ impl<'a> Lexer<'a> {
     /// `count` is the numeric prefix (default 1).
     fn handle_control_sequence(&mut self, ctrl_char: char, count: u32) -> Token {
         match ctrl_char {
-            // <C-U>, <C-D> -> MoveVerticalChunk(n)
             'U' | 'D' => Token::MoveVerticalChunk(i32::try_from(count).unwrap()),
-
-            // <C-F>, <C-B> -> JumpToVertical
             'F' | 'B' => Token::JumpToVertical,
-
-            // <C-E>, <C-Y> -> CameraMovement
             'E' | 'Y' => Token::CameraMovement,
-
-            // <C-R> -> UndoRedo
             'R' => Token::UndoRedo,
-
-            // <C-H>, <C-J>, <C-K>, <C-L> -> WindowManagement
             'H' | 'J' | 'K' | 'L' => Token::WindowManagement,
-
-            // <C-W> -> WindowManagement (consumes next character)
             'W' => {
-                // Consume the next character as part of the window command
-                // e.g., <C-W>s, <C-W>v, etc.
                 let _ = self.input.next();
                 Token::WindowManagement
             }
-
-            // Unrecognized control sequence
             _ => Token::Unhandled(format!("<C-{ctrl_char}>")),
         }
     }
@@ -149,7 +126,6 @@ impl<'a> Lexer<'a> {
     fn try_parse_pipe_delimited(&mut self) -> Option<String> {
         let mut key_name = String::new();
 
-        // Accumulate characters until we hit another '|' or end of input
         loop {
             match self.input.peek() {
                 Some(&'|') => {
@@ -165,7 +141,6 @@ impl<'a> Lexer<'a> {
                 Some(&ch) => {
                     self.input.next();
                     key_name.push(ch);
-                    // Limit length to prevent infinite accumulation
                     if key_name.len() > 10 {
                         return None;
                     }
@@ -181,31 +156,25 @@ impl<'a> Lexer<'a> {
     fn check_command_terminator(&mut self) -> Option<bool> {
         match self.input.peek() {
             Some(&'|') => {
-                // Clone iterator to peek ahead without consuming
                 let mut peek_iter = self.input.clone();
-                peek_iter.next(); // skip '|'
+                peek_iter.next();
 
-                // Check for "enter|" or "escape|"
                 let mut key_name = String::new();
                 loop {
                     match peek_iter.next() {
                         Some('|') => {
                             if key_name == "enter" {
-                                // Consume the |enter| from the real iterator
-                                self.input.next(); // '|'
-                                for _ in 0..5 {
-                                    self.input.next(); // "enter"
+                                // Consume |enter| (7 chars: | e n t e r |)
+                                for _ in 0..7 {
+                                    self.input.next();
                                 }
-                                self.input.next(); // '|'
                                 return Some(true);
                             }
                             if key_name == "escape" {
-                                // Consume the |escape| from the real iterator
-                                self.input.next(); // '|'
-                                for _ in 0..6 {
-                                    self.input.next(); // "escape"
+                                // Consume |escape| (8 chars: | e s c a p e |)
+                                for _ in 0..8 {
+                                    self.input.next();
                                 }
-                                self.input.next(); // '|'
                                 return Some(false);
                             }
                             return None;
@@ -228,12 +197,10 @@ impl<'a> Lexer<'a> {
     fn classify_command(content: &str, completed: bool) -> Token {
         let trimmed = content.trim();
 
-        // Check for line number: all digits
         if !trimmed.is_empty() && trimmed.chars().all(|c| c.is_ascii_digit()) {
             return Token::JumpToLineNumber(trimmed.to_string());
         }
 
-        // Check for help: starts with 'h' or 'help'
         if trimmed == "h"
             || trimmed.starts_with("h ")
             || trimmed == "help"
@@ -242,19 +209,16 @@ impl<'a> Lexer<'a> {
             return Token::HelpPage(completed);
         }
 
-        // Check for save: 'w' or 'w ' (write)
         if trimmed == "w" || trimmed.starts_with("w ") || trimmed.starts_with("w!") {
             return Token::SaveFile(completed);
         }
 
-        // Generic command
         Token::Command(completed)
     }
 
     fn accumulate_digit(&mut self, digit: char) -> u32 {
         self.accumulated_string.push(digit);
 
-        // Parse the accumulated string to get current count
         let mut count: u32 = 0;
         for ch in self.accumulated_string.chars() {
             let digit_value = ch.to_digit(10).unwrap_or(0);
@@ -380,7 +344,6 @@ impl<'a> Lexer<'a> {
                     break;
                 }
             }
-            // Now get the actual motion
             let total_count = count.saturating_mul(motion_count);
             return self.handle_operator_with_motion(operator, total_count);
         }
@@ -402,21 +365,16 @@ impl<'a> Lexer<'a> {
     /// Handle operator with a motion character
     fn handle_operator_char_motion(&mut self, operator: Operator, count: u32, ch: char) -> Token {
         match ch {
-            // Word/chunk motions, line position motions, basic movements
             'w' | 'W' | 'e' | 'E' | 'b' | 'B' | '$' | '^' | '0' | 'j' | 'k' | 'h' | 'l' => {
                 Self::operator_to_token(operator, count)
             }
-            // Find char motions (consume target char)
             'f' | 'F' | 't' | 'T' => {
-                // Consume the target character
                 if self.input.next().is_some() {
                     Self::operator_to_token(operator, count)
                 } else {
-                    // Incomplete find motion
                     Token::Unhandled(format!("{}{ch}", Self::operator_to_char(operator)))
                 }
             }
-            // g-prefix motions (gg, gj, gk, g$, etc.)
             'g' => {
                 if let Some(&next_ch) = self.input.peek() {
                     self.input.next();
@@ -433,7 +391,6 @@ impl<'a> Lexer<'a> {
                     Token::Unhandled(format!("{}g", Self::operator_to_char(operator)))
                 }
             }
-            // Unrecognized motion
             _ => Token::Unhandled(format!("{}{ch}", Self::operator_to_char(operator))),
         }
     }
@@ -470,7 +427,6 @@ impl<'a> Lexer<'a> {
                     break;
                 }
             }
-            // Now get the actual motion
             return self
                 .handle_case_operator_with_motion(operator, count.saturating_mul(motion_count));
         }
@@ -484,21 +440,16 @@ impl<'a> Lexer<'a> {
     /// The motion itself (not the case operator) determines the range.
     fn handle_case_operator_char_motion(&mut self, operator: &str, ch: char) -> Token {
         match ch {
-            // Word/chunk motions, line position motions, basic movements
             'w' | 'W' | 'e' | 'E' | 'b' | 'B' | '$' | '^' | '0' | 'j' | 'k' | 'h' | 'l' => {
                 Token::TextManipulationAdvanced
             }
-            // Find char motions (consume target char)
             'f' | 'F' | 't' | 'T' => {
-                // Consume the target character
                 if self.input.next().is_some() {
                     Token::TextManipulationAdvanced
                 } else {
-                    // Incomplete find motion
                     Token::Unhandled(format!("{operator}{ch}"))
                 }
             }
-            // g-prefix motions (gg, gj, gk, g$, etc.)
             'g' => {
                 if let Some(&next_ch) = self.input.peek() {
                     self.input.next();
@@ -512,7 +463,6 @@ impl<'a> Lexer<'a> {
                     Token::Unhandled(format!("{operator}g"))
                 }
             }
-            // Text objects (i/a + object)
             'i' | 'a' => {
                 if let Some(&obj_ch) = self.input.peek() {
                     if Self::is_text_object_char(obj_ch) {
@@ -522,7 +472,6 @@ impl<'a> Lexer<'a> {
                 }
                 Token::Unhandled(format!("{operator}{ch}"))
             }
-            // Unrecognized motion
             _ => Token::Unhandled(format!("{operator}{ch}")),
         }
     }
@@ -538,9 +487,6 @@ impl<'a> Lexer<'a> {
 
     #[allow(clippy::too_many_lines)]
     pub fn next_token(&mut self) -> Option<Token> {
-        // Handle accumulated state from previous calls
-        // First, check if we're in command, search, or replace mode and extract content
-        // 0 = CommandMode, 1 = SearchMode, 2 = ReplaceMode
         let mode_content = match &mut self.state {
             State::CommandMode { content } => Some((0, std::mem::take(content))),
             State::SearchMode { content } => Some((1, std::mem::take(content))),
@@ -549,9 +495,6 @@ impl<'a> Lexer<'a> {
         };
 
         if let Some((mode_type, mut content)) = mode_content {
-            // mode_type: 0 = CommandMode, 1 = SearchMode, 2 = ReplaceMode
-
-            // ReplaceMode only terminates on |escape|
             if mode_type == 2 {
                 loop {
                     // Check for |escape| terminator
@@ -678,8 +621,7 @@ impl<'a> Lexer<'a> {
                                 Some(Token::JumpToLineNumber(accumulated))
                             }
                             'g' => {
-                                self.input.next(); // consume 'g'
-                                                   // g-prefix commands with numeric prefix: gj, gk, gg, gJ, g~, gu, gU
+                                self.input.next();
                                 match self.input.next() {
                                     Some('j' | 'k') => Some(Token::MoveVerticalBasic(
                                         i32::try_from(count).unwrap(),
@@ -689,7 +631,6 @@ impl<'a> Lexer<'a> {
                                         i32::try_from(count).unwrap(),
                                     )),
                                     Some('~') => {
-                                        // g~ case toggle operator with count
                                         self.state = State::CaseOperatorPending {
                                             operator: "g~".to_string(),
                                             count,
@@ -697,7 +638,6 @@ impl<'a> Lexer<'a> {
                                         self.next_token()
                                     }
                                     Some('u') => {
-                                        // gu lowercase operator with count
                                         self.state = State::CaseOperatorPending {
                                             operator: "gu".to_string(),
                                             count,
@@ -705,7 +645,6 @@ impl<'a> Lexer<'a> {
                                         self.next_token()
                                     }
                                     Some('U') => {
-                                        // gU uppercase operator with count
                                         self.state = State::CaseOperatorPending {
                                             operator: "gU".to_string(),
                                             count,
@@ -717,8 +656,7 @@ impl<'a> Lexer<'a> {
                                 }
                             }
                             'z' => {
-                                self.input.next(); // consume 'z'
-                                                   // z-prefix commands (no numeric prefix support per spec)
+                                self.input.next();
                                 match self.input.next() {
                                     Some('z' | 't' | 'b') => Some(Token::CameraMovement),
                                     Some(ch) => Some(Token::Unhandled(format!("z{ch}"))),
@@ -726,8 +664,7 @@ impl<'a> Lexer<'a> {
                                 }
                             }
                             'f' | 'F' | 't' | 'T' => {
-                                self.input.next(); // consume the command char
-                                                   // These commands consume the next character as the target
+                                self.input.next();
                                 if self.input.next().is_some() {
                                     Some(Token::JumpToHorizontal)
                                 } else {
@@ -735,8 +672,7 @@ impl<'a> Lexer<'a> {
                                 }
                             }
                             'r' => {
-                                self.input.next(); // consume 'r'
-                                                   // Replace command consumes the next character
+                                self.input.next();
                                 if self.input.next().is_some() {
                                     Some(Token::TextManipulationBasic(
                                         i32::try_from(count).unwrap(),
@@ -746,7 +682,7 @@ impl<'a> Lexer<'a> {
                                 }
                             }
                             'd' => {
-                                self.input.next(); // consume 'd'
+                                self.input.next();
                                 self.state = State::OperatorPending {
                                     operator: Operator::Delete,
                                     count,
@@ -754,7 +690,7 @@ impl<'a> Lexer<'a> {
                                 self.next_token()
                             }
                             'y' => {
-                                self.input.next(); // consume 'y'
+                                self.input.next();
                                 self.state = State::OperatorPending {
                                     operator: Operator::Yank,
                                     count,
@@ -762,7 +698,7 @@ impl<'a> Lexer<'a> {
                                 self.next_token()
                             }
                             'c' => {
-                                self.input.next(); // consume 'c'
+                                self.input.next();
                                 self.state = State::OperatorPending {
                                     operator: Operator::Change,
                                     count,
@@ -770,23 +706,17 @@ impl<'a> Lexer<'a> {
                                 self.next_token()
                             }
                             '<' => {
-                                self.input.next(); // consume '<'
+                                self.input.next();
                                 if let Some(ctrl_char) = self.try_parse_control_sequence() {
                                     Some(self.handle_control_sequence(ctrl_char, count))
                                 } else {
-                                    // Not a valid control sequence, return accumulated as unhandled
-                                    // and let '<' be processed next time
                                     Some(Token::Unhandled(accumulated))
                                 }
                             }
-                            _ => {
-                                // Not a command we handle with counts
-                                Some(Token::Unhandled(accumulated))
-                            }
+                            _ => Some(Token::Unhandled(accumulated)),
                         }
                     }
                 } else {
-                    // End of input while accumulating
                     self.state = State::None;
                     let accumulated = self.accumulated_string.clone();
                     self.accumulated_string.clear();
@@ -796,14 +726,12 @@ impl<'a> Lexer<'a> {
             State::None => {
                 let ch = self.input.next()?;
 
-                // Check for digits (excluding leading zero)
                 if ch.is_ascii_digit() && ch != '0' {
                     let count = self.accumulate_digit(ch);
                     self.state = State::AccumulatingCount(count);
-                    return self.next_token(); // Recurse to process next
+                    return self.next_token();
                 }
 
-                // Try simple command handling first
                 match Self::handle_simple_command(ch, 1) {
                     CommandResult::Token(token) => return Some(token),
                     CommandResult::ConsumeNextOptional(success, failure) => {
@@ -818,59 +746,48 @@ impl<'a> Lexer<'a> {
 
                 // Special commands that need state transitions or complex handling
                 match ch {
-                    '0' => Some(Token::Unhandled("0".into())), // Line start motion - not tracked
+                    '0' => Some(Token::Unhandled("0".into())),
                     'G' => Some(Token::JumpToLineNumber(String::new())),
-                    'g' => {
-                        // g-prefix commands: gj, gk, gg, gJ, g~, gu, gU
-                        match self.input.next() {
-                            Some('j' | 'k') => Some(Token::MoveVerticalBasic(1)),
-                            Some('g') => Some(Token::JumpToLineNumber(String::new())),
-                            Some('J') => Some(Token::TextManipulationBasic(1)),
-                            Some('~') => {
-                                // g~ case toggle operator - enter case operator pending state
-                                self.state = State::CaseOperatorPending {
-                                    operator: "g~".to_string(),
-                                    count: 1,
-                                };
-                                self.next_token()
-                            }
-                            Some('u') => {
-                                // gu lowercase operator - enter case operator pending state
-                                self.state = State::CaseOperatorPending {
-                                    operator: "gu".to_string(),
-                                    count: 1,
-                                };
-                                self.next_token()
-                            }
-                            Some('U') => {
-                                // gU uppercase operator - enter case operator pending state
-                                self.state = State::CaseOperatorPending {
-                                    operator: "gU".to_string(),
-                                    count: 1,
-                                };
-                                self.next_token()
-                            }
-                            Some(ch) => Some(Token::Unhandled(format!("g{ch}"))),
-                            None => Some(Token::Unhandled("g".into())),
+                    'g' => match self.input.next() {
+                        Some('j' | 'k') => Some(Token::MoveVerticalBasic(1)),
+                        Some('g') => Some(Token::JumpToLineNumber(String::new())),
+                        Some('J') => Some(Token::TextManipulationBasic(1)),
+                        Some('~') => {
+                            self.state = State::CaseOperatorPending {
+                                operator: "g~".to_string(),
+                                count: 1,
+                            };
+                            self.next_token()
                         }
-                    }
+                        Some('u') => {
+                            self.state = State::CaseOperatorPending {
+                                operator: "gu".to_string(),
+                                count: 1,
+                            };
+                            self.next_token()
+                        }
+                        Some('U') => {
+                            self.state = State::CaseOperatorPending {
+                                operator: "gU".to_string(),
+                                count: 1,
+                            };
+                            self.next_token()
+                        }
+                        Some(ch) => Some(Token::Unhandled(format!("g{ch}"))),
+                        None => Some(Token::Unhandled("g".into())),
+                    },
                     'R' => {
-                        // Enter replace mode - accumulate until <Esc>
                         self.state = State::ReplaceMode {
                             content: String::new(),
                         };
                         self.next_token()
                     }
-                    'z' => {
-                        // z-prefix commands: zz, zt, zb
-                        match self.input.next() {
-                            Some('z' | 't' | 'b') => Some(Token::CameraMovement),
-                            Some(ch) => Some(Token::Unhandled(format!("z{ch}"))),
-                            None => Some(Token::Unhandled("z".into())),
-                        }
-                    }
+                    'z' => match self.input.next() {
+                        Some('z' | 't' | 'b') => Some(Token::CameraMovement),
+                        Some(ch) => Some(Token::Unhandled(format!("z{ch}"))),
+                        None => Some(Token::Unhandled("z".into())),
+                    },
                     'd' => {
-                        // Delete operator - enter operator pending state
                         self.state = State::OperatorPending {
                             operator: Operator::Delete,
                             count: 1,
@@ -878,7 +795,6 @@ impl<'a> Lexer<'a> {
                         self.next_token()
                     }
                     'y' => {
-                        // Yank operator - enter operator pending state
                         self.state = State::OperatorPending {
                             operator: Operator::Yank,
                             count: 1,
@@ -886,7 +802,6 @@ impl<'a> Lexer<'a> {
                         self.next_token()
                     }
                     'c' => {
-                        // Change operator - enter operator pending state
                         self.state = State::OperatorPending {
                             operator: Operator::Change,
                             count: 1,
@@ -894,7 +809,6 @@ impl<'a> Lexer<'a> {
                         self.next_token()
                     }
                     '<' => {
-                        // Try to parse control sequence
                         if let Some(ctrl_char) = self.try_parse_control_sequence() {
                             Some(self.handle_control_sequence(ctrl_char, 1))
                         } else {
@@ -902,7 +816,6 @@ impl<'a> Lexer<'a> {
                         }
                     }
                     '|' => {
-                        // Try to parse pipe-delimited special key
                         if let Some(key) = self.try_parse_pipe_delimited() {
                             match key.as_str() {
                                 "escape" => Some(Token::Unhandled("|escape|".into())),
@@ -913,14 +826,12 @@ impl<'a> Lexer<'a> {
                         }
                     }
                     ':' => {
-                        // Enter command mode
                         self.state = State::CommandMode {
                             content: String::new(),
                         };
                         self.next_token()
                     }
                     '/' | '?' => {
-                        // Enter search mode
                         self.state = State::SearchMode {
                             content: String::new(),
                         };
@@ -1288,11 +1199,10 @@ mod tests {
 
     #[test]
     fn test_zz_mixed() {
-        // zz then zt then zb
         let mut lexer = Lexer::new("zzztzb");
-        assert!(matches!(lexer.next_token(), Some(Token::CameraMovement))); // zz
-        assert!(matches!(lexer.next_token(), Some(Token::CameraMovement))); // zt
-        assert!(matches!(lexer.next_token(), Some(Token::CameraMovement))); // zb
+        assert!(matches!(lexer.next_token(), Some(Token::CameraMovement)));
+        assert!(matches!(lexer.next_token(), Some(Token::CameraMovement)));
+        assert!(matches!(lexer.next_token(), Some(Token::CameraMovement)));
         assert!(lexer.next_token().is_none());
     }
 
@@ -1790,172 +1700,6 @@ mod tests {
         assert!(matches!(lexer.next_token(), Some(Token::Unhandled(ref s)) if s == "`"));
     }
 
-    //
-    // #[test]
-    // fn basic_vertical_movements() {
-    //     const TEST_INPUT: &str = "j10jkk5kjj";
-    // }
-    //
-    // #[test]
-    // fn basic_horizontal_movements() {
-    //     const TEST_INPUT: &str = "10hll5lh<Esc>h";
-    // }
-    //
-    // #[test]
-    // fn chunk_horizontal_movements() {
-    //     const TEST_INPUT: &str = "10weEb5bw";
-    // }
-    //
-    // #[test]
-    // fn mixed_input_movements_hb_hc_vm() {
-    //     const TEST_INPUT: &str = "jj3jwwbE3wllkk";
-    // }
-    //
-    // #[test]
-    // fn jump_horizontal_movements() {
-    //     const TEST_INPUT: &str = "f3;;nFlnt3T3";
-    // }
-    //
-    // #[test]
-    // fn jump_to_line_number_gg() {
-    //     const TEST_INPUT: &str = "33gg";
-    // }
-    //
-    // #[test]
-    // fn jump_to_line_number_g() {
-    //     const TEST_INPUT: &str = "22Gj";
-    // }
-    //
-    // #[test]
-    // fn jump_to_line_number_command_mode() {
-    //     const TEST_INPUT: &str = "j:322|enter|";
-    // }
-    //
-    // #[test]
-    // fn jump_to_line_number_command_mode_cr_issue_edition() {
-    //     const TEST_INPUT: &str = "j:322|enter|j";
-    // }
-    //
-    // #[test]
-    // fn jump_to_vertical() {
-    //     const TEST_INPUT: &str = "MHL<C-F><C-B>";
-    // }
-    //
-    // #[test]
-    // fn jump_from_context() {
-    //     const TEST_INPUT: &str = ":<C-U>call<Space>matchit#Match_wrapper('',1,'n')|enter|m'zv";
-    // }
-    //
-    // #[test]
-    // fn camera_movement() {
-    //     // 5 camera movements
-    //     const TEST_INPUT: &str = "zzzzbzt<C-E><C-Y>";
-    // }
-    //
-    // #[test]
-    // fn window_management() {
-    //     // 2 windows, 2 move vertical basics, 16 windows
-    //     const TEST_INPUT: &str = "<C-W>s<C-W>vkk<C-W>w<C-W>q<C-W>x<C-W>=<C-W>h<C-W>j<C-W>k<C-W>l<C-W>H<C-W>L<C-W>J<C-W>K<C-H><C-J><C-K><C-L>";
-    // }
-    //
-    // #[test]
-    // fn text_manipulation_basic() {
-    //     // 4 text manip basics
-    //     const TEST_INPUT: &str = "12xdlJ3rp4gJ";
-    // }
-    //
-    // #[test]
-    // fn text_manipulation_advanced_1() {
-    //     // 3 text manip advanced
-    //     const TEST_INPUT: &str = "c$$gu3wgU44$";
-    // }
-    //
-    // #[test]
-    // fn text_manipulation_advanced_2() {
-    //     // 3 text manip advanced
-    //     const TEST_INPUT: &str = "Rxxx<Esc>R3<Esc>R<Esc>";
-    // }
-    //
-    // #[test]
-    // fn text_manipulation_advanced_3() {
-    //     // 2 advanceds
-    //     const TEST_INPUT: &str = "gu3fgguF.";
-    // }
-    //
-    // #[test]
-    // fn text_manipulation_advanced_tokens() {
-    //     // 8 text manip advances
-    //     const TEST_INPUT: &str = "c$$Cc$ceecwwsclSccciwwiwcawwaw";
-    // }
-    //
-    // #[test]
-    // fn text_manipulation_advanced_change_arounds() {
-    //     // 6 text manip advanceds
-    //     const TEST_INPUT: &str = r#"ci))<C-\><C-N>zvzvvci((<C-\><C-N>zvzvvci[[<C-\><C-N>zvzvvci]]<C-\><C-N>zvzvvci{{<C-\><C-N>zvzvvci}}<C-\><C-N>zvzvv"#;
-    // }
-    //
-    // #[test]
-    // fn yank_paste() {
-    //     // 8 yank pastes
-    //     const TEST_INPUT: &str = r#"3""3p""1p4""4P3y$y$yiw3yawy<Esc><C-\><C-N><Esc>"#;
-    // }
-    //
-    // #[test]
-    // fn undo_redo() {
-    //     // 3 undoredo
-    //     const TEST_INPUT: &str = "uU<C-R>";
-    // }
-    //
-    // #[test]
-    // fn dot_repeater() {
-    //     // move chunk 3, dot repeat, move chunk 3
-    //     const TEST_INPUT: &str = "3w.3w";
-    // }
-    //
-    // #[test]
-    // fn command_search() {
-    //     // command search true, command search false
-    //     const TEST_INPUT: &str = r#"/testsearch|enter|/testsearch2<Esc>"#;
-    // }
-    //
-    // #[test]
-    // fn delete_text() {
-    //     // delete text 3, delete text 1, delete text 3, delete text 1
-    //     const TEST_INPUT: &str = "d33ddddd3xx";
-    // }
-    //
-    // #[test]
-    // fn delete_text_word() {
-    //     // delete text 1, delete text 3
-    //     const TEST_INPUT: &str = "dwwd33ww";
-    // }
-    //
-    // #[test]
-    // fn help_page() {
-    //     // help, move move, help
-    //     const TEST_INPUT: &str = ":h test<Esc>jj:help test|enter|";
-    // }
-    //
-    // #[test]
-    // fn save_file() {
-    //     const TEST_INPUT: &str = ":w<Esc>j:w|enter|";
-    // }
-    //
-    // #[test]
-    // fn gracefully_handles_commands() {
-    //     const TEST_INPUT: &str = ":Vimscape|enter|";
-    // }
-    //
-    // #[test]
-    // fn handles_commands_gracefully_vimscape_show_data() {
-    //     const TEST_INPUT: &str = ":lua<Space>require('vimscape2007').show_data()|enter|";
-    // }
-    //
-    // #[test]
-    // fn gracefully_handles_commands_with_space() {
-    //     const TEST_INPUT: &str = ":Vimscape toggle<Esc>";
-    // }
-
     // =========================================================================
     // Raw Typed Input Tests
     // =========================================================================
@@ -2077,11 +1821,11 @@ mod tests {
     #[test]
     fn test_delete_various_motions_raw() {
         let mut lexer = Lexer::new("dWdedEdBdB");
-        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1)))); // dW
-        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1)))); // de
-        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1)))); // dE
-        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1)))); // dB
-        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1)))); // dB
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
+        assert!(matches!(lexer.next_token(), Some(Token::DeleteText(1))));
         assert!(lexer.next_token().is_none());
     }
 
@@ -2111,11 +1855,11 @@ mod tests {
         assert!(matches!(
             lexer.next_token(),
             Some(Token::TextManipulationAdvanced)
-        )); // guw
+        ));
         assert!(matches!(
             lexer.next_token(),
             Some(Token::TextManipulationAdvanced)
-        )); // gu$
+        ));
         assert!(lexer.next_token().is_none());
     }
 
@@ -2182,11 +1926,11 @@ mod tests {
         assert!(matches!(
             lexer.next_token(),
             Some(Token::TextManipulationAdvanced)
-        )); // ciw
+        ));
         assert!(matches!(
             lexer.next_token(),
             Some(Token::TextManipulationAdvanced)
-        )); // caw
+        ));
         assert!(lexer.next_token().is_none());
     }
 

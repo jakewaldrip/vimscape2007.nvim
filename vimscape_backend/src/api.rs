@@ -43,7 +43,7 @@ pub fn process_batch((input, db_path): (String, String)) -> bool {
     }
 
     let Ok(conn) = Connection::open(&db_path) else {
-        println!("Failed to connect to database");
+        eprintln!("[vimscape] Failed to connect to database");
         return false;
     };
 
@@ -65,7 +65,6 @@ pub fn process_batch((input, db_path): (String, String)) -> bool {
         }
     };
 
-    // Write both levels and XP within the same transaction
     if !write_levels_to_table_tx(&tx, &levels_diff) {
         return false;
     }
@@ -78,7 +77,6 @@ pub fn process_batch((input, db_path): (String, String)) -> bool {
         return false;
     }
 
-    // Notifications happen after successful commit
     notify_level_ups(&levels_diff);
 
     true
@@ -86,7 +84,7 @@ pub fn process_batch((input, db_path): (String, String)) -> bool {
 
 pub fn get_user_data((col_len, db_path): (i32, String)) -> Vec<String> {
     let Ok(conn) = Connection::open(&db_path) else {
-        println!("Failed to connect to database");
+        eprintln!("[vimscape] Failed to connect to database");
         return Vec::new();
     };
 
@@ -97,7 +95,7 @@ pub fn get_user_data((col_len, db_path): (i32, String)) -> Vec<String> {
 #[allow(clippy::needless_pass_by_value)]
 pub fn setup_tables(db_path: String) {
     let Ok(conn) = Connection::open(&db_path) else {
-        println!("Failed to connect to database");
+        eprintln!("[vimscape] Failed to connect to database");
         return;
     };
 
@@ -106,7 +104,7 @@ pub fn setup_tables(db_path: String) {
 
 pub fn get_skill_details((c_word, db_path): (String, String)) -> Vec<String> {
     let Ok(conn) = Connection::open(&db_path) else {
-        println!("Failed to connect to database");
+        eprintln!("[vimscape] Failed to connect to database");
         return Vec::new();
     };
 

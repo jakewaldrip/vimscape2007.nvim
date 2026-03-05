@@ -1,6 +1,6 @@
 local function get_plugin_dir()
-	local str = debug.getinfo(1, "S").source:sub(2) -- Remove the "@" character
-	return vim.fn.fnamemodify(str, ":p:h:h") -- Get the directory name, go one level up
+	local str = debug.getinfo(1, "S").source:sub(2)
+	return vim.fn.fnamemodify(str, ":p:h:h")
 end
 
 ---@class Config

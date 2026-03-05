@@ -74,9 +74,7 @@ pub fn get_levels_diff(
 /// Notifies about level-ups via Neovim's notification system.
 pub fn notify_level_ups(levels_diff: &HashMap<String, i32>) {
     let notify_opts = Dictionary::new();
-    for level_data in levels_diff {
-        let skill_name = level_data.0;
-        let level = level_data.1;
+    for (skill_name, level) in levels_diff {
         if let Err(e) = notify(
             &format!("{skill_name} reached level {level}!"),
             LogLevel::Info,
@@ -94,100 +92,72 @@ mod tests {
 
     #[test]
     fn get_level_for_exp_level_1() {
-        let exp = 0;
-        let result = get_level_for_exp(exp);
-        assert_eq!(result, 1);
+        assert_eq!(get_level_for_exp(0), 1);
     }
 
     #[test]
     fn get_level_for_exp_negative_exp() {
-        let exp = -10;
-        let result = get_level_for_exp(exp);
-        assert_eq!(result, 1);
+        assert_eq!(get_level_for_exp(-10), 1);
     }
 
     #[test]
     fn get_level_for_exp_level_4() {
-        let exp = 300;
-        let result = get_level_for_exp(exp);
-        assert_eq!(result, 4);
+        assert_eq!(get_level_for_exp(300), 4);
     }
 
     #[test]
     fn get_level_for_exp_level_5() {
-        let exp = 400;
-        let result = get_level_for_exp(exp);
-        assert_eq!(result, 5);
+        assert_eq!(get_level_for_exp(400), 5);
     }
 
     #[test]
     fn get_level_for_exp_level_8() {
-        let exp = 840;
-        let result = get_level_for_exp(exp);
-        assert_eq!(result, 8);
+        assert_eq!(get_level_for_exp(840), 8);
     }
 
     #[test]
     fn get_level_for_exp_level_20() {
-        let exp = 4600;
-        let result = get_level_for_exp(exp);
-        assert_eq!(result, 20);
+        assert_eq!(get_level_for_exp(4600), 20);
     }
 
     #[test]
     fn get_level_for_exp_level_30() {
-        let exp = 13800;
-        let result = get_level_for_exp(exp);
-        assert_eq!(result, 30);
+        assert_eq!(get_level_for_exp(13800), 30);
     }
 
     #[test]
     fn get_level_for_exp_level_40() {
-        let exp = 39000;
-        let result = get_level_for_exp(exp);
-        assert_eq!(result, 40);
+        assert_eq!(get_level_for_exp(39000), 40);
     }
 
     #[test]
     fn get_level_for_exp_level_50() {
-        let exp = 105_000;
-        let result = get_level_for_exp(exp);
-        assert_eq!(result, 50);
+        assert_eq!(get_level_for_exp(105_000), 50);
     }
 
     #[test]
     fn get_level_for_exp_level_60() {
-        let exp = 290_000;
-        let result = get_level_for_exp(exp);
-        assert_eq!(result, 60);
+        assert_eq!(get_level_for_exp(290_000), 60);
     }
 
     #[test]
     fn get_level_for_exp_level_70() {
-        let exp = 750_000;
-        let result = get_level_for_exp(exp);
-        assert_eq!(result, 70);
+        assert_eq!(get_level_for_exp(750_000), 70);
     }
 
     #[test]
     fn get_level_for_exp_level_80() {
-        let exp = 2_000_000;
-        let result = get_level_for_exp(exp);
-        assert_eq!(result, 80);
+        assert_eq!(get_level_for_exp(2_000_000), 80);
     }
 
     #[test]
     fn get_level_for_exp_level_90() {
-        let exp = 5_500_000;
-        let result = get_level_for_exp(exp);
-        assert_eq!(result, 90);
+        assert_eq!(get_level_for_exp(5_500_000), 90);
     }
 
     #[test]
     fn get_level_for_exp_level_99() {
-        let exp = 14_000_000;
-        let result = get_level_for_exp(exp);
-        assert_eq!(result, 99);
+        assert_eq!(get_level_for_exp(14_000_000), 99);
     }
 
     #[test]

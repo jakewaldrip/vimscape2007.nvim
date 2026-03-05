@@ -7,13 +7,11 @@ local config = require("config")
 
 local ns = vim.api.nvim_create_namespace("vimscape_keys")
 
----Returns the full path to the database file
----@return string
 local function get_db_full_path()
 	return config.db_path .. config.db_name
 end
 
-local record_key = function(key, typed)
+local record_key = function(_, typed)
 	keys.record_keys(typed, get_db_full_path(), config.batch_size, config)
 end
 
@@ -126,7 +124,6 @@ M.create_user_commands = function()
 			return
 		end
 
-		-- Show details
 		if command == "details" then
 			local word = vim.fn.expand("<cword>")
 			M.show_details(word)
@@ -141,7 +138,7 @@ M.create_user_commands = function()
 		end
 	end, {
 		nargs = "?",
-		complete = function(arg_lead, cmd_line, cursor_pos)
+		complete = function(arg_lead, _cmd_line, _cursor_pos)
 			local commands = { "stats", "details", "toggle", "flush" }
 			local matches = {}
 			for _, cmd in ipairs(commands) do

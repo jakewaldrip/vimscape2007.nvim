@@ -87,7 +87,6 @@ pub fn format_skill_data(skill_data: &[SkillData], col_len: i32) -> Vec<String> 
         lines.push(bottom_line);
     }
 
-    // ----
     lines
 }
 
@@ -129,8 +128,7 @@ fn get_global_left_padding(col_len: i32, num_cols: i32) -> String {
     // Full width of the box: (columns * width) - columns (for separators) + 1 (for border)
     let full_box_width: i32 = (num_cols * COL_WIDTH) - num_cols + 1;
     let padding_amount: i32 = (col_len - full_box_width) / 2;
-    let padding_space: String = repeat_n(" ", padding_amount as usize).collect::<String>();
-    padding_space
+    repeat_n(" ", padding_amount as usize).collect::<String>()
 }
 
 fn get_num_cols(col_len: i32) -> i32 {
@@ -147,15 +145,8 @@ fn get_num_cols(col_len: i32) -> i32 {
 }
 
 pub fn format_skill_details(skill_data: &SkillData) -> Vec<String> {
-    let mut lines: Vec<String> = Vec::new();
-
-    let mut experience_line: String = "Experience - ".into();
-    experience_line.push_str(&skill_data.total_exp.to_string());
-    lines.push(experience_line);
-
-    let mut level_line: String = "Level - ".into();
-    level_line.push_str(&skill_data.level.to_string());
-    lines.push(level_line);
-
-    lines
+    vec![
+        format!("Experience - {}", skill_data.total_exp),
+        format!("Level - {}", skill_data.level),
+    ]
 }

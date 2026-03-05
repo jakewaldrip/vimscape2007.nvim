@@ -26,9 +26,7 @@ end
 
 M.print_to_buffer = function(content, bufnr)
 	for k, v in pairs(content) do
-		local text = {}
-		text[1] = v
-		vim.api.nvim_buf_set_lines(bufnr, k, k, false, text)
+		vim.api.nvim_buf_set_lines(bufnr, k, k, false, { v })
 	end
 end
 
