@@ -1,6 +1,6 @@
 local function get_plugin_dir()
-	local str = debug.getinfo(1, "S").source:sub(2)
-	return vim.fn.fnamemodify(str, ":p:h:h")
+  local str = debug.getinfo(1, "S").source:sub(2)
+  return vim.fn.fnamemodify(str, ":p:h:h")
 end
 
 ---@class Config
@@ -12,13 +12,13 @@ end
 ---@field token_log boolean Whether to enable token logging to file for integration testing
 ---@field key_overrides table<string, string> Map of physical keys to substituted keys for the lexer (e.g. { [";"] = ":" })
 local M = {
-	db_path = get_plugin_dir() .. "/",
-	db_name = "vimscape.db",
-	batch_size = 1000,
-	log_level = vim.log.levels.INFO,
-	batch_notify = false,
-	token_log = false,
-	key_overrides = {},
+  db_path = get_plugin_dir() .. "/",
+  db_name = "vimscape.db",
+  batch_size = 1000,
+  log_level = vim.log.levels.ERROR,
+  batch_notify = false,
+  token_log = false,
+  key_overrides = {},
 }
 
 return M
