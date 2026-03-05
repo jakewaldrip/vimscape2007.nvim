@@ -1,3 +1,7 @@
+# Warning
+
+Though this plugin is very close to being released, its not _quite_ ready. Check back soon for an official release
+
 # vimscape2007.nvim
 
 Neovim plugin to gamify development in the spirit of old school RuneScape.
