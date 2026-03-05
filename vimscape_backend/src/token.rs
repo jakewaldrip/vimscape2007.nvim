@@ -18,6 +18,7 @@ pub enum Token {
     JumpToHorizontal,
 
     // :10|enter|, 10gg, gg, G
+    #[allow(dead_code)]
     JumpToLineNumber(String),
 
     // M, H, L, <C-F>, <C-B>
