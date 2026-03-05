@@ -54,9 +54,17 @@ M.sanitize_key = function(key)
 	return translated
 end
 
-M.record_keys = function(key, db_path, batch_size, config)
+M.record_keys = function(typed, db_path, batch_size, config)
 	-- Return if we're not actively listening
 	if not globals.get_active() then
+		return
+	end
+
+	-- Skip internally-generated key events (decomposed sub-operations).
+	-- vim.on_key's second arg (typed) is empty for keys produced by
+	-- Neovim's internal expansion of a previously typed key (e.g. <C-U>
+	-- decomposes into many <C-E> events, each with typed="").
+	if typed == nil or typed == "" then
 		return
 	end
 
@@ -66,7 +74,7 @@ M.record_keys = function(key, db_path, batch_size, config)
 		return
 	end
 
-	local new_key = M.sanitize_key(key)
+	local new_key = M.sanitize_key(typed)
 
 	if new_key == nil then
 		return

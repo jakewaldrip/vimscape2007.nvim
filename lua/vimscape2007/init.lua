@@ -13,8 +13,8 @@ local function get_db_full_path()
 	return config.db_path .. config.db_name
 end
 
-local record_key = function(key)
-	keys.record_keys(key, get_db_full_path(), config.batch_size, config)
+local record_key = function(key, typed)
+	keys.record_keys(typed, get_db_full_path(), config.batch_size, config)
 end
 
 ---@class Vimscape2007

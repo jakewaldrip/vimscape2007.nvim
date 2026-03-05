@@ -88,7 +88,11 @@ The plugin gamifies Vim usage by tracking 11 distinct skills, each leveling from
 1. User presses keys in Neovim (normal mode)
               │
               ▼
-2. keys.lua captures via vim.on_key()
+2. keys.lua captures via vim.on_key(key, typed)
+   Uses the `typed` (2nd) arg — the raw key before
+   Neovim's internal expansion. Events where `typed`
+   is empty (internally-decomposed sub-events) are
+   skipped entirely.
               │
               ▼
 3. sanitize_key() filters/translates special keys
@@ -117,7 +121,7 @@ The plugin gamifies Vim usage by tracking 11 distinct skills, each leveling from
 
 ### Key Sanitization
 
-The Lua frontend translates Neovim's key representations into a format the Rust lexer can parse:
+The Lua frontend translates raw typed key representations into a format the Rust lexer can parse:
 
 | Neovim Key | Sanitized Output |
 |------------|------------------|
@@ -364,9 +368,8 @@ The lexer should recognize and tokenize the following Vim commands:
 
 | Input Pattern | Token | Notes |
 |---------------|-------|-------|
-| `%` (matchit) | `JumpFromContext` | Expands to `:<C-U>call...` |
+| `%` | `JumpFromContext` | Jump to matching bracket |
 | `ci)`, `ca)`, etc. | `TextManipulationAdvanced` | Text objects |
-| `"[reg][n]p` | `YankPaste` | Register access |
 
 ### Pipe-Delimited Special Keys
 
