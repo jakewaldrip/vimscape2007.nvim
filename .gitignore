@@ -28,3 +28,5 @@ lua/.vimscape_backend_version
 # Testing helper files
 integration_test_commands.txt
 vimscape_token_log.txt
+
+notes/
