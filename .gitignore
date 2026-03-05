@@ -29,4 +29,7 @@ lua/.vimscape_backend_version
 integration_test_commands.txt
 vimscape_token_log.txt
 
+# Agent files
 notes/
+AGENTS.md
+SPEC.md
