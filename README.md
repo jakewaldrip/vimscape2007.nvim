@@ -117,7 +117,17 @@ In the stats window, press `q` to close or `d` to show details for the skill und
 
 - **Key remaps** -- The lexer sees physical keys, not remapped ones. If you remap keys at the Vim level (e.g., `;` to `:`), add them to `key_overrides` so the lexer interprets them correctly: `key_overrides = { [";"] = ":" }`.
 
-- **XP lost on exit** -- Keystrokes are buffered in memory until `batch_size` is reached. There is no automatic flush when Neovim exits, so any buffered keystrokes are lost. Use `:Vimscape flush` before quitting, or lower `batch_size` to reduce the risk.
+- **XP lost on exit** -- Keystrokes are buffered in memory until `batch_size` is reached. There is no automatic flush when Neovim exits, so any buffered keystrokes are lost. Use `:Vimscape flush` before quitting, lower `batch_size` to reduce the risk, or set up the optional auto-flush autocommand described below.
+
+- **Auto-flush on exit** -- To automatically flush buffered keystrokes when Neovim exits, add a `VimLeavePre` autocommand to your config. This is optional and intentionally not set up by the plugin, so you can opt in based on your preference:
+
+  ```lua
+  vim.api.nvim_create_autocmd("VimLeavePre", {
+      callback = function()
+          vim.cmd("Vimscape flush")
+      end,
+  })
+  ```
 
 - **Tracked modes** -- Only normal mode keystrokes earn XP. Insert mode is skipped entirely. Visual mode and macro commands are captured but don't earn XP yet.
 
