@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use nvim_oxi::{
-    api::{notify, types::LogLevel},
     Dictionary,
+    api::{notify, types::LogLevel},
 };
 
 use crate::skill_data::SkillData;
@@ -62,10 +62,10 @@ pub fn get_levels_diff(
 ) -> HashMap<String, i32> {
     let mut levels_diff: HashMap<String, i32> = HashMap::new();
     for old_data in skill_data {
-        if let Some(new_level) = new_levels.get(&old_data.skill_name) {
-            if new_level > &old_data.level {
-                levels_diff.insert(old_data.skill_name.clone(), *new_level);
-            }
+        if let Some(new_level) = new_levels.get(&old_data.skill_name)
+            && new_level > &old_data.level
+        {
+            levels_diff.insert(old_data.skill_name.clone(), *new_level);
         }
     }
     levels_diff

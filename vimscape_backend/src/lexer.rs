@@ -130,10 +130,10 @@ impl<'a> Lexer<'a> {
             match self.input.peek() {
                 Some(&'|') => {
                     self.input.next(); // consume closing '|'
-                                       // Validate known pipe-delimited keys
+                    // Validate known pipe-delimited keys
                     match key_name.as_str() {
                         "enter" | "tab" | "backspace" | "space" | "escape" => {
-                            return Some(key_name)
+                            return Some(key_name);
                         }
                         _ => return None, // Unknown pipe-delimited key
                     }
@@ -384,16 +384,15 @@ impl<'a> Lexer<'a> {
         }
 
         // Handle text objects (i/a + object)
-        if ch == 'i' || ch == 'a' {
-            if let Some(&obj_ch) = self.input.peek() {
-                if Self::is_text_object_char(obj_ch) {
-                    self.input.next(); // consume the object char
-                                       // Skip replayed text object chars (e.g., ciw → ciwiw)
-                    self.skip_if_duplicate(ch);
-                    self.skip_if_duplicate(obj_ch);
-                    return Self::operator_to_token(operator, count);
-                }
-            }
+        if (ch == 'i' || ch == 'a')
+            && let Some(&obj_ch) = self.input.peek()
+            && Self::is_text_object_char(obj_ch)
+        {
+            self.input.next(); // consume the object char
+            // Skip replayed text object chars (e.g., ciw → ciwiw)
+            self.skip_if_duplicate(ch);
+            self.skip_if_duplicate(obj_ch);
+            return Self::operator_to_token(operator, count);
         }
 
         // Handle regular motions
@@ -552,15 +551,15 @@ impl<'a> Lexer<'a> {
                 }
             }
             'i' | 'a' => {
-                if let Some(&obj_ch) = self.input.peek() {
-                    if Self::is_text_object_char(obj_ch) {
-                        self.input.next(); // consume the object char
-                        if skip_dupes {
-                            self.skip_if_duplicate(ch);
-                            self.skip_if_duplicate(obj_ch);
-                        }
-                        return Token::TextManipulationAdvanced;
+                if let Some(&obj_ch) = self.input.peek()
+                    && Self::is_text_object_char(obj_ch)
+                {
+                    self.input.next(); // consume the object char
+                    if skip_dupes {
+                        self.skip_if_duplicate(ch);
+                        self.skip_if_duplicate(obj_ch);
                     }
+                    return Token::TextManipulationAdvanced;
                 }
                 Token::Unhandled(format!("{operator}{ch}"))
             }
