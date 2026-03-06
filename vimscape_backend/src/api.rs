@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use nvim_oxi::{
-    api::{notify, types::LogLevel},
     Dictionary,
+    api::{notify, types::LogLevel},
 };
 use rusqlite::Connection;
 
@@ -226,7 +226,7 @@ mod tests {
         tokens
     }
 
-    /// Helper: count occurrences of CameraMovement in a token vec
+    /// Helper: count occurrences of `CameraMovement` in a token vec
     fn count_camera(tokens: &[Token]) -> usize {
         tokens
             .iter()

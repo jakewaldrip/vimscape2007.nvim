@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use rusqlite::{params, Connection, Transaction};
+use rusqlite::{Connection, Transaction, params};
 
 use crate::{skill_data::SkillData, skills::Skills};
 
