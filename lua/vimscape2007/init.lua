@@ -33,6 +33,10 @@ M.setup = function(opts)
 
 	config = vim.tbl_deep_extend("force", config, opts or {})
 
+	if config.recording_on then
+		M.toggle()
+	end
+
 	if not vimscape then
 		vim.notify(
 			"Vimscape2007: failed to load backend. Run ':Lazy build vimscape2007.nvim' or see README for build instructions.",

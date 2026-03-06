@@ -89,6 +89,9 @@ Track your Vim usage and earn XP across 11 skills, leveling from 1-99 on a RuneS
         -- Useful if you remap keys at the OS/keyboard level
         -- Example: { [";"] = ":" }
         key_overrides = {},
+
+        -- Enable recording when the plugin starts (default: true)
+        recording_on = true,
     },
 }
 ```
