@@ -1,5 +1,10 @@
-local vimscape = require("vimscape_backend")
 local globals = require("globals")
+local utils = require("utils")
+
+local ok, vimscape = pcall(require, "vimscape_backend")
+if not ok then
+	vimscape = nil
+end
 
 ---@class Keys
 local M = {}
@@ -80,12 +85,10 @@ M.record_keys = function(typed, db_path, batch_size, config)
 	end
 
 	local typed_letters = globals.get_typed_letters()
-	if #typed_letters >= batch_size then
+	if #typed_letters >= batch_size and vimscape then
 		local string_value = table.concat(typed_letters)
 		vimscape.process_batch(string_value, db_path)
-		if config.batch_notify then
-			vim.notify("Processed batch", vim.log.levels.INFO, {})
-		end
+		utils.notify("Processed batch", vim.log.levels.DEBUG)
 		globals.clear_typed_letters()
 	end
 

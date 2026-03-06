@@ -80,7 +80,7 @@ pub fn notify_level_ups(levels_diff: &HashMap<String, i32>) {
             LogLevel::Info,
             &notify_opts,
         ) {
-            eprintln!("Failed to notify level up for {skill_name}: {e:?}");
+            eprintln!("[vimscape] Failed to notify level up for {skill_name}: {e:?}");
         }
     }
 }

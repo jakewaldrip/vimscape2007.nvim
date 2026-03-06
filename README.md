@@ -1,7 +1,3 @@
-# Warning
-
-Though this plugin is very close to being released, its not _quite_ ready. Check back soon for an official release
-
 # vimscape2007.nvim
 
 Neovim plugin to gamify development in the spirit of old school RuneScape.
@@ -68,13 +64,34 @@ Track your Vim usage and earn XP across 11 skills, leveling from 1-99 on a RuneS
 
 ## Configuration
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `db_path` | string | Plugin directory | Directory for the SQLite database |
-| `db_name` | string | `"vimscape.db"` | Database filename |
-| `batch_size` | number | `1000` | Keystrokes before processing batch |
-| `log_level` | integer | `vim.log.levels.INFO` | Minimum log level for notifications |
-| `batch_notify` | boolean | `false` | Show notification after each batch |
+```lua
+{
+    "jakewaldrip/vimscape2007.nvim",
+    version = "*",
+    ---@type Config
+    opts = {
+        -- Directory path where the SQLite database will be stored
+        db_path = vim.fn.stdpath("data") .. "/vimscape2007/",
+
+        -- Filename for the database file
+        db_name = "vimscape.db",
+
+        -- Number of keystrokes buffered before processing a batch
+        batch_size = 1000,
+
+        -- Minimum log level for notifications (vim.log.levels)
+        log_level = vim.log.levels.INFO,
+
+        -- Enable token logging to file (for integration testing/debugging)
+        token_log = false,
+
+        -- Map of physical keys to substituted keys for the lexer
+        -- Useful if you remap keys at the OS/keyboard level
+        -- Example: { [";"] = ":" }
+        key_overrides = {},
+    },
+}
+```
 
 ## Commands
 
@@ -83,9 +100,24 @@ Track your Vim usage and earn XP across 11 skills, leveling from 1-99 on a RuneS
 | `:Vimscape stats` | Open skills display window |
 | `:Vimscape details` | Show details for skill under cursor |
 | `:Vimscape toggle` | Toggle keystroke recording on/off |
+| `:Vimscape flush` | Manually process and save buffered keystrokes |
 
 In the stats window, press `q` to close or `d` to show details for the skill under cursor.
 
+## Tips & Troubleshooting
+
+- **Database location** -- The database is stored in Neovim's data directory (`vim.fn.stdpath("data")`) by default, which persists safely across plugin updates. You can customize `db_path` if you prefer a different location.
+
+- **Leader key** -- Only `<Space>` is supported as a leader key. If you use a different leader (e.g., `,` or `\`), echoed leader bindings will be misinterpreted by the lexer, causing inaccurate XP tracking.
+
+- **Key remaps** -- The lexer sees physical keys, not remapped ones. If you remap keys at the Vim level (e.g., `;` to `:`), add them to `key_overrides` so the lexer interprets them correctly: `key_overrides = { [";"] = ":" }`.
+
+- **XP lost on exit** -- Keystrokes are buffered in memory until `batch_size` is reached. There is no automatic flush when Neovim exits, so any buffered keystrokes are lost. Use `:Vimscape flush` before quitting, or lower `batch_size` to reduce the risk.
+
+- **Tracked modes** -- Only normal mode keystrokes earn XP. Insert mode is skipped entirely. Visual mode and macro commands are captured but don't earn XP yet.
+
+- **Untracked motions** -- Some normal mode commands don't earn XP yet, including `0`, `$`, `^`, arrow keys, visual mode operators, macros (`q`/`@`), and register prefixes (`"`). These are planned for future releases.
+
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE.md)

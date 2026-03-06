@@ -1,5 +1,9 @@
 use std::collections::HashMap;
 
+use nvim_oxi::{
+    api::{notify, types::LogLevel},
+    Dictionary,
+};
 use rusqlite::Connection;
 
 use crate::{
@@ -14,6 +18,15 @@ use crate::{
     token::Token,
     token_log,
 };
+
+/// Notify the user of an error via Neovim's notification system.
+/// Falls back to stderr if the Neovim API is unavailable.
+fn notify_error(msg: &str) {
+    let opts = Dictionary::new();
+    if let Err(e) = notify(msg, LogLevel::Error, &opts) {
+        eprintln!("[vimscape] {msg} (notify failed: {e:?})");
+    }
+}
 
 #[allow(clippy::needless_pass_by_value)]
 pub fn enable_token_log(db_path: String) {
@@ -124,13 +137,13 @@ pub fn process_batch((input, db_path): (String, String)) -> bool {
     }
 
     let Ok(conn) = Connection::open(&db_path) else {
-        eprintln!("[vimscape] Failed to connect to database");
+        notify_error("[vimscape] Failed to connect to database");
         return false;
     };
 
     let skill_data = get_skill_data(&conn);
     if skill_data.is_empty() {
-        eprintln!("[vimscape] No skill data found in database");
+        notify_error("[vimscape] No skill data found in database");
         return false;
     }
 
@@ -141,7 +154,7 @@ pub fn process_batch((input, db_path): (String, String)) -> bool {
     let tx = match conn.unchecked_transaction() {
         Ok(tx) => tx,
         Err(e) => {
-            eprintln!("[vimscape] Transaction start failed: {e}");
+            notify_error(&format!("[vimscape] Transaction start failed: {e}"));
             return false;
         }
     };
@@ -154,7 +167,7 @@ pub fn process_batch((input, db_path): (String, String)) -> bool {
     }
 
     if let Err(e) = tx.commit() {
-        eprintln!("[vimscape] Commit failed: {e}");
+        notify_error(&format!("[vimscape] Commit failed: {e}"));
         return false;
     }
 
@@ -165,7 +178,7 @@ pub fn process_batch((input, db_path): (String, String)) -> bool {
 
 pub fn get_user_data((col_len, db_path): (i32, String)) -> Vec<String> {
     let Ok(conn) = Connection::open(&db_path) else {
-        eprintln!("[vimscape] Failed to connect to database");
+        notify_error("[vimscape] Failed to connect to database");
         return Vec::new();
     };
 
@@ -176,7 +189,7 @@ pub fn get_user_data((col_len, db_path): (i32, String)) -> Vec<String> {
 #[allow(clippy::needless_pass_by_value)]
 pub fn setup_tables(db_path: String) {
     let Ok(conn) = Connection::open(&db_path) else {
-        eprintln!("[vimscape] Failed to connect to database");
+        notify_error("[vimscape] Failed to connect to database");
         return;
     };
 
@@ -185,7 +198,7 @@ pub fn setup_tables(db_path: String) {
 
 pub fn get_skill_details((c_word, db_path): (String, String)) -> Vec<String> {
     let Ok(conn) = Connection::open(&db_path) else {
-        eprintln!("[vimscape] Failed to connect to database");
+        notify_error("[vimscape] Failed to connect to database");
         return Vec::new();
     };
 

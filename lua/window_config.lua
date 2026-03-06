@@ -8,11 +8,15 @@ local utils = require("utils")
 local M = {}
 
 local function get_ui_size()
-	local ui = vim.api.nvim_list_uis()[1]
+	local uis = vim.api.nvim_list_uis()
+	if #uis == 0 then
+		return 80, 24
+	end
+	local ui = uis[1]
 	return utils.round(ui.width), utils.round(ui.height)
 end
 
-M.vimscape_stats_bufnr = vim.api.nvim_create_buf(false, true)
+M.vimscape_stats_bufnr = -1
 
 M.stat_window_config = function()
 	local width, height = get_ui_size()
@@ -31,7 +35,7 @@ M.stat_window_config = function()
 	}
 end
 
-M.vimscape_details_bufnr = vim.api.nvim_create_buf(false, true)
+M.vimscape_details_bufnr = -1
 
 M.details_window_config = function()
 	return {

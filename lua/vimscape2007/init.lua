@@ -2,8 +2,12 @@ local keys = require("keys")
 local utils = require("utils")
 local globals = require("globals")
 local window_config = require("window_config")
-local vimscape = require("vimscape_backend")
 local config = require("config")
+
+local ok, vimscape = pcall(require, "vimscape_backend")
+if not ok then
+	vimscape = nil
+end
 
 local ns = vim.api.nvim_create_namespace("vimscape_keys")
 
@@ -25,16 +29,34 @@ local M = {}
 
 ---@param opts Config?
 M.setup = function(opts)
-	if vim.log.levels.INFO >= config.log_level then
-		vim.notify("Ran setup for Vimscape", vim.log.levels.INFO)
-	end
+	utils.notify("Vimscape2007 initialized", vim.log.levels.DEBUG)
 
 	config = vim.tbl_deep_extend("force", config, opts or {})
-	vimscape.setup_tables(get_db_full_path())
+
+	if not vimscape then
+		vim.notify(
+			"Vimscape2007: failed to load backend. Run ':Lazy build vimscape2007.nvim' or see README for build instructions.",
+			vim.log.levels.ERROR
+		)
+		M.create_user_commands()
+		return
+	end
+
+	vim.fn.mkdir(config.db_path, "p")
+
+	local setup_ok, setup_err = pcall(vimscape.setup_tables, get_db_full_path())
+	if not setup_ok then
+		vim.notify(
+			"Vimscape2007: database initialization failed: " .. tostring(setup_err),
+			vim.log.levels.ERROR
+		)
+		M.create_user_commands()
+		return
+	end
 
 	if config.token_log then
 		vimscape.enable_token_log(get_db_full_path())
-		vim.notify("Vimscape token logging enabled", vim.log.levels.INFO)
+		utils.notify("Vimscape token logging enabled", vim.log.levels.DEBUG)
 	end
 
 	M.create_user_commands()
@@ -44,14 +66,10 @@ M.toggle = function()
 	globals.set_active(not globals.get_active())
 
 	if globals.get_active() then
-		if vim.log.levels.INFO >= config.log_level then
-			vim.notify("Vimscape recording started", vim.log.levels.INFO, {})
-		end
+		utils.notify("Vimscape recording started", vim.log.levels.INFO)
 		vim.on_key(record_key, ns)
 	else
-		if vim.log.levels.INFO >= config.log_level then
-			vim.notify("Vimscape recording paused", vim.log.levels.INFO, {})
-		end
+		utils.notify("Vimscape recording paused", vim.log.levels.INFO)
 		vim.on_key(nil, ns)
 		vim.api.nvim_buf_clear_namespace(0, ns, 0, -1)
 		globals.clear_typed_letters()
@@ -59,6 +77,11 @@ M.toggle = function()
 end
 
 M.show_data = function()
+	if not vimscape then
+		vim.notify("Vimscape2007: backend not loaded", vim.log.levels.ERROR)
+		return
+	end
+
 	if vim.api.nvim_buf_is_valid(window_config.vimscape_stats_bufnr) then
 		vim.api.nvim_buf_delete(window_config.vimscape_stats_bufnr, { force = true })
 	end
@@ -84,6 +107,11 @@ M.show_data = function()
 end
 
 M.show_details = function(word)
+	if not vimscape then
+		vim.notify("Vimscape2007: backend not loaded", vim.log.levels.ERROR)
+		return
+	end
+
 	if vim.api.nvim_buf_is_valid(window_config.vimscape_details_bufnr) then
 		vim.api.nvim_buf_delete(window_config.vimscape_details_bufnr, { force = true })
 	end
@@ -103,16 +131,22 @@ M.show_details = function(word)
 end
 
 M.flush = function()
-	local typed_letters = globals.get_typed_letters()
-	if #typed_letters == 0 then
-		vim.notify("Vimscape: no keystrokes to flush", vim.log.levels.INFO)
+	if not vimscape then
+		vim.notify("Vimscape2007: backend not loaded", vim.log.levels.ERROR)
 		return
 	end
 
+	local typed_letters = globals.get_typed_letters()
+	if #typed_letters == 0 then
+		utils.notify("Vimscape: no keystrokes to flush", vim.log.levels.INFO)
+		return
+	end
+
+	local count = #typed_letters
 	local string_value = table.concat(typed_letters)
 	vimscape.process_batch(string_value, get_db_full_path())
 	globals.clear_typed_letters()
-	vim.notify("Vimscape: flushed " .. #typed_letters .. " keystrokes", vim.log.levels.INFO)
+	utils.notify("Vimscape: flushed " .. count .. " keystrokes", vim.log.levels.INFO)
 end
 
 M.create_user_commands = function()
@@ -120,12 +154,16 @@ M.create_user_commands = function()
 		local command = cmd_opts.args
 
 		if command == "" then
-			vim.notify("Vimscape commands: stats, details, toggle, flush", vim.log.levels.INFO)
+			utils.notify("Vimscape commands: stats, details, toggle, flush", vim.log.levels.INFO)
 			return
 		end
 
 		if command == "details" then
 			local word = vim.fn.expand("<cword>")
+			if word == "" then
+				utils.notify("Place cursor on a skill name first", vim.log.levels.WARN)
+				return
+			end
 			M.show_details(word)
 		elseif command == "stats" then
 			M.show_data()
@@ -134,7 +172,7 @@ M.create_user_commands = function()
 		elseif command == "flush" then
 			M.flush()
 		else
-			vim.notify("Invalid Vimscape command. Use: stats, details, toggle, flush", vim.log.levels.WARN)
+			utils.notify("Invalid Vimscape command. Use: stats, details, toggle, flush", vim.log.levels.WARN)
 		end
 	end, {
 		nargs = "?",
