@@ -4,6 +4,8 @@ Neovim plugin to gamify development in the spirit of old school RuneScape.
 
 Track your Vim usage and earn XP across 11 skills, leveling from 1-99 on a RuneScape-inspired XP curve.
 
+<img width="2536" height="1390" alt="image" src="https://github.com/user-attachments/assets/13ded782-8fc5-4a5b-a528-a08922495cdd" />
+
 ### Skills
 
 | Skill | Description | Example Commands |
